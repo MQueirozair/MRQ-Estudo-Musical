@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Manual de Utilização e Documentação
+    url: https://github.com/MQueirozair/MRQ-Estudo-Musical/tree/main/docs
+    about: Consulte os guias de instalação, compilação e uso antes de abrir uma issue.

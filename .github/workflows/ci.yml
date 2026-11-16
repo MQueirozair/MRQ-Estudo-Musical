@@ -34,7 +34,7 @@ jobs:
           pip install -r requirements.txt
 
       - name: Run Full Automated Test Suite (DSP, Formats, AI, SQLite, API, Performance)
-        run: pytest -v tests/
+        run: python -m pytest -v tests/
 
       - name: Build Frontend Studio (TypeScript + Vite)
         run: |

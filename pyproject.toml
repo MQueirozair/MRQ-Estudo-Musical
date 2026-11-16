@@ -1,0 +1,19 @@
+[project]
+name = "mrq-estudo-musical"
+version = "1.0.0"
+description = "Software comercial multiplataforma de estudo musical, time stretching, analise harmonica por IA, transcricao MIDI e separacao de instrumentos."
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.11"
+authors = [
+    { name = "MRQ Estudo Musical" }
+]
+keywords = ["music", "dsp", "time-stretching", "pitch-shifting", "transcription", "midi", "source-separation", "audio"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+addopts = "-v --tb=short"
+filterwarnings = [
+    "ignore::DeprecationWarning:starlette.*"
+]

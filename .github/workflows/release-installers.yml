@@ -102,7 +102,7 @@ jobs:
             --add-data "apps/studio/dist:apps/studio/dist" \
             --distpath "apps/desktop/backend-dist" \
             backend/main.py
-          npm --prefix apps/desktop ci
+          npm --prefix apps/desktop install
           npm --prefix apps/desktop run dist:linux
       - name: Upload Linux AppImage
         uses: actions/upload-artifact@v4
