@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import sys
 import threading
 import uuid
 from contextlib import contextmanager
@@ -45,6 +46,8 @@ class ProjectRepository:
 
     def _init_schema(self) -> None:
         schema_file = Path(__file__).resolve().parent / "schema.sql"
+        if not schema_file.exists() and hasattr(sys, "_MEIPASS"):
+            schema_file = Path(getattr(sys, "_MEIPASS")) / "database" / "schema.sql"
         sql = schema_file.read_text(encoding="utf-8")
         with self._connect() as conn:
             conn.executescript(sql)

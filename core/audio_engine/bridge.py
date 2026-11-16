@@ -16,6 +16,7 @@ from __future__ import annotations
 import ctypes
 import os
 import platform
+import sys
 from pathlib import Path
 from typing import List, Tuple, Optional
 
@@ -34,20 +35,27 @@ class MrqMidiNoteC(ctypes.Structure):
 
 def _find_dsp_library() -> Path:
     repo_root = Path(__file__).resolve().parents[2]
+    meipass = Path(getattr(sys, "_MEIPASS", repo_root))
     system = platform.system().lower()
     if system == "windows":
         candidates = [
             repo_root / "core" / "build" / "mrq_dsp.dll",
             repo_root / "core" / "build" / "Release" / "mrq_dsp.dll",
             repo_root / "core" / "build" / "libmrq_dsp.dll",
+            meipass / "mrq_dsp.dll",
+            meipass / "core" / "build" / "mrq_dsp.dll",
         ]
     elif system == "darwin":
         candidates = [
             repo_root / "core" / "build" / "libmrq_dsp.dylib",
+            meipass / "libmrq_dsp.dylib",
+            meipass / "core" / "build" / "libmrq_dsp.dylib",
         ]
     else:
         candidates = [
             repo_root / "core" / "build" / "libmrq_dsp.so",
+            meipass / "libmrq_dsp.so",
+            meipass / "core" / "build" / "libmrq_dsp.so",
         ]
 
     env_path = os.environ.get("MRQ_DSP_LIB")

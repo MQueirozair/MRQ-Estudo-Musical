@@ -7,8 +7,10 @@ and browser/live preview via clean relative `/api/*` endpoints.
 from __future__ import annotations
 
 import json
+import multiprocessing
 import os
 import shutil
+import sys
 import tempfile
 import threading
 import time
@@ -47,7 +49,7 @@ from database.repository import ProjectRepository
 from plugins import registry as plugin_registry
 from scripts.generate_demo_audio import generate_study_song
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[1]))
 APP_CONFIG_PATH = REPO_ROOT / "app.config.json"
 
 
@@ -59,7 +61,7 @@ def create_app(data_dir: Optional[str | Path] = None) -> FastAPI:
     audio_mgr = AudioManager(storage_root, dsp=dsp)
     repo = ProjectRepository(storage_root / "mrq_projects.db")
     exporter = ProjectExporter(audio_mgr, dsp=dsp)
-    model_mgr = ModelManager(REPO_ROOT / "models")
+    model_mgr = ModelManager(REPO_ROOT / "models", weights_dir=storage_root / "model_weights")
 
     # Background task progress tracker (for stem separation & full analysis)
     jobs: Dict[str, Dict[str, Any]] = {}
@@ -739,6 +741,7 @@ app = create_app()
 
 
 if __name__ == "__main__":
+    multiprocessing.freeze_support()
     import uvicorn
 
     port = int(os.environ.get("MRQ_PORT", "8765"))

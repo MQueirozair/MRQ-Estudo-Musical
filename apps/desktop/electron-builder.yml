@@ -39,7 +39,7 @@ win:
     - target: msi
       arch:
         - x64
-  icon: ../../assets/icons/mrq-icon-256.png
+  icon: ../../assets/icons/mrq-icon.ico
   artifactName: "MRQ-Estudo-Musical-Setup-${version}-${arch}.${ext}"
 
 nsis:
@@ -64,11 +64,11 @@ mac:
   target:
     - target: dmg
       arch:
-        - universal
+        - arm64
     - target: zip
       arch:
-        - universal
-  hardenedRuntime: true
+        - arm64
+  hardenedRuntime: false
   gatekeeperAssess: false
   artifactName: "MRQ-Estudo-Musical-${version}-${arch}.${ext}"
 

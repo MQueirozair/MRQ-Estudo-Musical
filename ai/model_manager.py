@@ -20,10 +20,10 @@ import psutil
 
 
 class ModelManager:
-    def __init__(self, models_dir: str | Path) -> None:
+    def __init__(self, models_dir: str | Path, weights_dir: Optional[str | Path] = None) -> None:
         self.models_dir = Path(models_dir)
         self.manifest_path = self.models_dir / "manifest.json"
-        self.weights_dir = self.models_dir / "weights"
+        self.weights_dir = Path(weights_dir) if weights_dir else (self.models_dir / "weights")
         self.weights_dir.mkdir(parents=True, exist_ok=True)
         self._lock = threading.RLock()
         self._download_state: Dict[str, Dict] = {}

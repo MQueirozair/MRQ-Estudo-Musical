@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# macOS Universal Build Script (.app + .dmg for Apple Silicon arm64 & Intel x86_64)
+# macOS Build Script (.app + .dmg for Apple Silicon arm64 with Universal libmrq_dsp.dylib)
 # Must be executed on macOS (Xcode Command Line Tools installed) or GitHub Actions macos-14 runner.
 set -euo pipefail
 
@@ -30,24 +30,45 @@ clang++ -std=c++17 -O3 -arch x86_64 -dynamiclib -DMRQ_DSP_EXPORTS -Icore/include
 
 lipo -create core/build/libmrq_dsp_arm64.dylib core/build/libmrq_dsp_x86_64.dylib \
   -output core/build/libmrq_dsp.dylib
+rm -f core/build/libmrq_dsp_arm64.dylib core/build/libmrq_dsp_x86_64.dylib
 file core/build/libmrq_dsp.dylib
+
+# Run native C++ test suite on macOS
+clang++ -std=c++17 -O3 -Icore/include core/tests/test_dsp_cpp.cpp \
+  -Lcore/build -lmrq_dsp -Wl,-rpath,@executable_path -o core/build/test_dsp_cpp
+./core/build/test_dsp_cpp
 
 echo "=== [2/4] Compilando Interface MRQ Studio ==="
 npm --prefix apps/studio ci
 npm --prefix apps/studio run build
 
 echo "=== [3/4] Empacotando Motor Local (PyInstaller) ==="
+python3 -m pip install --upgrade pip
 python3 -m pip install -r requirements.txt pyinstaller
 pyinstaller --noconfirm --onefile --name mrq-engine \
+  --paths . \
   --add-data "database/schema.sql:database" \
   --add-data "models/manifest.json:models" \
   --add-data "app.config.json:." \
   --add-data "apps/studio/dist:apps/studio/dist" \
+  --collect-all av \
+  --collect-all reportlab \
+  --collect-all mido \
+  --collect-binaries onnxruntime \
+  --hidden-import uvicorn.logging \
+  --hidden-import uvicorn.loops.auto \
+  --hidden-import uvicorn.protocols.http.auto \
+  --hidden-import uvicorn.protocols.websockets.auto \
+  --hidden-import uvicorn.lifespan.on \
+  --hidden-import multipart \
   --distpath "apps/desktop/backend-dist" \
   backend/main.py
 
-echo "=== [4/4] Gerando .APP e .DMG (Assinatura/Notarização automática se APPLE_ID presente) ==="
-npm --prefix apps/desktop ci
+echo "=== [4/4] Gerando .APP e .DMG ==="
+if [ -z "${CSC_LINK:-}" ]; then
+  export CSC_IDENTITY_AUTO_DISCOVERY=false
+fi
+npm --prefix apps/desktop install
 npm --prefix apps/desktop run dist:mac
 
 ls -lh apps/desktop/release/

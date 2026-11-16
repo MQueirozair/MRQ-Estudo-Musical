@@ -8,7 +8,7 @@
   "scripts": {
     "start": "electron .",
     "dist:win": "electron-builder --win nsis msi --x64 --config electron-builder.yml",
-    "dist:mac": "electron-builder --mac dmg zip --universal --config electron-builder.yml",
+    "dist:mac": "electron-builder --mac dmg zip --arm64 --config electron-builder.yml",
     "dist:linux": "electron-builder --linux AppImage --x64 --config electron-builder.yml"
   },
   "devDependencies": {

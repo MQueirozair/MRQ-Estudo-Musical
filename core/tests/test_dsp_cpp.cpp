@@ -4,7 +4,9 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <filesystem>
 #include <fstream>
+#include <string>
 #include <vector>
 #include <algorithm>
 #include <cassert>
@@ -130,7 +132,8 @@ int main() {
         {72, 0.5, 0.5, 95, 0},
         {76, 1.0, 1.0, 110, 0}
     };
-    const char* tmp_mid = "/tmp/mrq_cpp_test.mid";
+    std::string tmp_mid_str = (std::filesystem::temp_directory_path() / "mrq_cpp_test.mid").string();
+    const char* tmp_mid = tmp_mid_str.c_str();
     rc = mrq_write_midi_file(tmp_mid, 120.0, 4, 4, test_notes, 3);
     assert(rc == 0);
     std::ifstream ifs(tmp_mid, std::ios::binary);
