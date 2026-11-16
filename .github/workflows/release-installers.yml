@@ -114,18 +114,24 @@ jobs:
         run: |
           make -C core test
           npm --prefix apps/studio ci && npm --prefix apps/studio run build
+          rm -rf apps/desktop/backend-dist
           python -m pip install --upgrade pip
           pip install -r requirements.txt pyinstaller
-          pyinstaller --noconfirm --onefile --name mrq-engine \
+          pyinstaller --noconfirm --onedir --name mrq-engine \
             --paths . \
             --add-data "database/schema.sql:database" \
             --add-data "models/manifest.json:models" \
             --add-data "app.config.json:." \
             --add-data "apps/studio/dist:apps/studio/dist" \
             --collect-all av \
+            --collect-binaries onnxruntime \
+            --collect-data onnxruntime \
+            --collect-submodules onnxruntime.capi \
             --collect-all reportlab \
             --collect-all mido \
-            --collect-binaries onnxruntime \
+            --collect-submodules scipy.signal \
+            --collect-submodules scipy.ndimage \
+            --hidden-import scripts.generate_demo_audio \
             --hidden-import uvicorn.logging \
             --hidden-import uvicorn.loops.auto \
             --hidden-import uvicorn.protocols.http.auto \
@@ -134,6 +140,7 @@ jobs:
             --hidden-import multipart \
             --distpath "apps/desktop/backend-dist" \
             backend/main.py
+          python scripts/smoke_test_engine.py "apps/desktop/backend-dist/mrq-engine/mrq-engine" "core/build/libmrq_dsp.so"
           npm --prefix apps/desktop install
           npm --prefix apps/desktop run dist:linux
       - name: Upload Linux AppImage

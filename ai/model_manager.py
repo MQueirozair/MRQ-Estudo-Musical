@@ -15,7 +15,12 @@ import urllib.request
 from pathlib import Path
 from typing import Callable, Dict, List, Optional
 
-import onnxruntime as ort
+try:
+    import onnxruntime as ort
+    _ORT_ERROR: Optional[str] = None
+except Exception as _exc:  # pragma: no cover - graceful fallback on systems without VC++/AVX
+    ort = None  # type: ignore[assignment]
+    _ORT_ERROR = str(_exc)
 import psutil
 
 
@@ -37,9 +42,14 @@ class ModelManager:
 
     def runtime_info(self) -> Dict:
         vm = psutil.virtual_memory()
-        providers = ort.get_available_providers()
+        if ort is not None:
+            providers = ort.get_available_providers()
+            ort_ver = ort.__version__
+        else:
+            providers = []
+            ort_ver = f"indisponível ({_ORT_ERROR or 'offline DSP ativo'})"
         return {
-            "onnxruntime_version": ort.__version__,
+            "onnxruntime_version": ort_ver,
             "execution_providers": providers,
             "gpu_available": any("CUDA" in p or "Dml" in p or "CoreML" in p for p in providers),
             "total_ram_mb": int(vm.total / (1024 * 1024)),

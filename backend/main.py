@@ -7,6 +7,7 @@ and browser/live preview via clean relative `/api/*` endpoints.
 from __future__ import annotations
 
 import json
+import logging
 import multiprocessing
 import os
 import shutil
@@ -50,7 +51,35 @@ from plugins import registry as plugin_registry
 from scripts.generate_demo_audio import generate_study_song
 
 REPO_ROOT = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[1]))
-APP_CONFIG_PATH = REPO_ROOT / "app.config.json"
+RESOURCES_ROOT = Path(os.environ.get("MRQ_RESOURCES_DIR") or REPO_ROOT)
+APP_CONFIG_PATH = (
+    REPO_ROOT / "app.config.json"
+    if (REPO_ROOT / "app.config.json").exists()
+    else RESOURCES_ROOT / "app.config.json"
+)
+
+
+def _resolve_studio_dist() -> Path:
+    candidates = [
+        REPO_ROOT / "apps" / "studio" / "dist",
+        RESOURCES_ROOT / "studio-dist",
+        RESOURCES_ROOT / "apps" / "studio" / "dist",
+    ]
+    for p in candidates:
+        if p.exists() and (p / "index.html").exists():
+            return p
+    return candidates[0]
+
+
+def _resolve_models_dir() -> Path:
+    candidates = [
+        REPO_ROOT / "models",
+        RESOURCES_ROOT / "models",
+    ]
+    for p in candidates:
+        if (p / "manifest.json").exists():
+            return p
+    return candidates[0]
 
 
 def create_app(data_dir: Optional[str | Path] = None) -> FastAPI:
@@ -61,7 +90,7 @@ def create_app(data_dir: Optional[str | Path] = None) -> FastAPI:
     audio_mgr = AudioManager(storage_root, dsp=dsp)
     repo = ProjectRepository(storage_root / "mrq_projects.db")
     exporter = ProjectExporter(audio_mgr, dsp=dsp)
-    model_mgr = ModelManager(REPO_ROOT / "models", weights_dir=storage_root / "model_weights")
+    model_mgr = ModelManager(_resolve_models_dir(), weights_dir=storage_root / "model_weights")
 
     # Background task progress tracker (for stem separation & full analysis)
     jobs: Dict[str, Dict[str, Any]] = {}
@@ -719,7 +748,7 @@ def create_app(data_dir: Optional[str | Path] = None) -> FastAPI:
 
     # ---------- SERVE BUILT FRONTEND (PRODUCTION / ELECTRON / PREVIEW) ----------
 
-    dist_dir = REPO_ROOT / "apps" / "studio" / "dist"
+    dist_dir = _resolve_studio_dist()
     if dist_dir.exists() and (dist_dir / "index.html").exists():
         assets_dir = dist_dir / "assets"
         if assets_dir.exists():
@@ -742,8 +771,12 @@ app = create_app()
 
 if __name__ == "__main__":
     multiprocessing.freeze_support()
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    )
     import uvicorn
 
     port = int(os.environ.get("MRQ_PORT", "8765"))
     host = os.environ.get("MRQ_HOST", "0.0.0.0")
-    uvicorn.run(app, host=host, port=port, log_level="info")
+    uvicorn.run(app, host=host, port=port, log_level="info", log_config=None)

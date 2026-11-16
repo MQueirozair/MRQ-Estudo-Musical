@@ -36,24 +36,28 @@ class MrqMidiNoteC(ctypes.Structure):
 def _find_dsp_library() -> Path:
     repo_root = Path(__file__).resolve().parents[2]
     meipass = Path(getattr(sys, "_MEIPASS", repo_root))
+    exe_dir = Path(sys.executable).resolve().parent
     system = platform.system().lower()
     if system == "windows":
         candidates = [
             repo_root / "core" / "build" / "mrq_dsp.dll",
             repo_root / "core" / "build" / "Release" / "mrq_dsp.dll",
             repo_root / "core" / "build" / "libmrq_dsp.dll",
+            exe_dir / "mrq_dsp.dll",
             meipass / "mrq_dsp.dll",
             meipass / "core" / "build" / "mrq_dsp.dll",
         ]
     elif system == "darwin":
         candidates = [
             repo_root / "core" / "build" / "libmrq_dsp.dylib",
+            exe_dir / "libmrq_dsp.dylib",
             meipass / "libmrq_dsp.dylib",
             meipass / "core" / "build" / "libmrq_dsp.dylib",
         ]
     else:
         candidates = [
             repo_root / "core" / "build" / "libmrq_dsp.so",
+            exe_dir / "libmrq_dsp.so",
             meipass / "libmrq_dsp.so",
             meipass / "core" / "build" / "libmrq_dsp.so",
         ]
@@ -75,7 +79,13 @@ class NativeDSPEngine:
     """Thread-safe wrapper around libmrq_dsp native C ABI."""
 
     def __init__(self, lib_path: Optional[Path] = None) -> None:
-        self.lib_path = lib_path or _find_dsp_library()
+        self.lib_path = (lib_path or _find_dsp_library()).resolve()
+        self._dll_dir_handle = None
+        if platform.system().lower() == "windows" and hasattr(os, "add_dll_directory"):
+            try:
+                self._dll_dir_handle = os.add_dll_directory(str(self.lib_path.parent))
+            except OSError:
+                pass
         self._lib = ctypes.CDLL(str(self.lib_path))
         self._configure_signatures()
 

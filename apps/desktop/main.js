@@ -6,8 +6,12 @@ const http = require('http');
 const { spawn } = require('child_process');
 
 let mainWindow = null;
+let splashWindow = null;
 let backendProc = null;
 let backendPort = 8765;
+let backendExitCode = null;
+let backendStderrTail = '';
+let engineLogPath = '';
 
 function findFreePort(startPort = 8765) {
   return new Promise((resolve) => {
@@ -21,24 +25,44 @@ function findFreePort(startPort = 8765) {
   });
 }
 
-function waitForBackend(port, timeoutMs = 25000) {
+function waitForBackend(port, timeoutMs = 60000) {
   const deadline = Date.now() + timeoutMs;
   return new Promise((resolve, reject) => {
     const probe = () => {
+      if (backendExitCode !== null) {
+        const tail = backendStderrTail.trim().slice(-900);
+        return reject(
+          new Error(
+            `O motor local MRQ encerrou inesperadamente (código ${backendExitCode}).\n\n` +
+              (tail ? `Detalhes:\n${tail}\n\n` : '') +
+              `Log completo: ${engineLogPath}`
+          )
+        );
+      }
       const req = http.get(`http://127.0.0.1:${port}/api/health`, (res) => {
         res.resume();
         if (res.statusCode === 200) return resolve();
         retry();
       });
       req.on('error', retry);
-      req.setTimeout(1000, () => {
+      req.setTimeout(1200, () => {
         req.destroy();
         retry();
       });
     };
     const retry = () => {
+      if (backendExitCode !== null) {
+        return probe();
+      }
       if (Date.now() > deadline) {
-        return reject(new Error('O motor local de áudio MRQ não respondeu dentro do tempo esperado.'));
+        const tail = backendStderrTail.trim().slice(-900);
+        return reject(
+          new Error(
+            'O motor local de áudio MRQ não respondeu dentro do tempo esperado (60s).\n\n' +
+              (tail ? `Última saída:\n${tail}\n\n` : '') +
+              `Log completo: ${engineLogPath}`
+          )
+        );
       }
       setTimeout(probe, 300);
     };
@@ -49,24 +73,32 @@ function waitForBackend(port, timeoutMs = 25000) {
 function resolveBackendCommand(port) {
   const dataDir = path.join(app.getPath('userData'), 'mrq-data');
   fs.mkdirSync(dataDir, { recursive: true });
+  engineLogPath = path.join(dataDir, 'engine.log');
+
   const env = {
     ...process.env,
     MRQ_PORT: String(port),
     MRQ_HOST: '127.0.0.1',
     MRQ_DATA_DIR: dataDir,
+    PYTHONUNBUFFERED: '1',
   };
 
   if (app.isPackaged) {
     const exeName = process.platform === 'win32' ? 'mrq-engine.exe' : 'mrq-engine';
-    const sidecarPath = path.join(process.resourcesPath, 'backend', exeName);
+    const onedirPath = path.join(process.resourcesPath, 'backend', 'mrq-engine', exeName);
+    const onefilePath = path.join(process.resourcesPath, 'backend', exeName);
+    const sidecarPath = fs.existsSync(onedirPath) ? onedirPath : onefilePath;
+
     const dspLibName =
       process.platform === 'win32'
         ? 'mrq_dsp.dll'
         : process.platform === 'darwin'
         ? 'libmrq_dsp.dylib'
         : 'libmrq_dsp.so';
+
     env.MRQ_DSP_LIB = path.join(process.resourcesPath, 'dsp', dspLibName);
-    return { cmd: sidecarPath, args: [], cwd: process.resourcesPath, env };
+    env.MRQ_RESOURCES_DIR = process.resourcesPath;
+    return { cmd: sidecarPath, args: [], cwd: path.dirname(sidecarPath), env };
   }
 
   // Development mode: run repo Python backend directly
@@ -79,16 +111,81 @@ function resolveBackendCommand(port) {
   return { cmd: pythonCmd, args: ['-m', 'backend.main'], cwd: repoRoot, env };
 }
 
+function createSplashWindow() {
+  splashWindow = new BrowserWindow({
+    width: 440,
+    height: 220,
+    frame: false,
+    resizable: false,
+    center: true,
+    backgroundColor: '#090D16',
+    show: true,
+    webPreferences: {
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  });
+  const html = `<!doctype html>
+  <html lang="pt-BR"><head><meta charset="utf-8" />
+  <style>
+    body{margin:0;height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    background:#090D16;color:#E2E8F0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+    border:1px solid #1E293B;box-sizing:border-box;user-select:none;}
+    .title{font-size:20px;font-weight:700;letter-spacing:.4px;color:#F8FAFC;margin-bottom:6px;}
+    .sub{font-size:12px;color:#94A3B8;margin-bottom:18px;}
+    .bar{width:220px;height:4px;background:#1E293B;border-radius:99px;overflow:hidden;}
+    .fill{width:45%;height:100%;background:linear-gradient(90deg,#38BDF8,#6366F1);animation:m 1.1s infinite ease-in-out;}
+    @keyframes m{0%{transform:translateX(-100%)}100%{transform:translateX(260%)}}
+  </style></head>
+  <body>
+    <div class="title">MRQ Estudo Musical</div>
+    <div class="sub">Iniciando motor nativo de áudio C++17 &amp; IA local...</div>
+    <div class="bar"><div class="fill"></div></div>
+  </body></html>`;
+  splashWindow.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(html));
+}
+
 async function startBackend() {
   backendPort = await findFreePort(8765);
+  backendExitCode = null;
+  backendStderrTail = '';
   const { cmd, args, cwd, env } = resolveBackendCommand(backendPort);
-  backendProc = spawn(cmd, args, { cwd, env, stdio: 'pipe' });
-  backendProc.stdout.on('data', (d) => process.stdout.write(`[mrq-engine] ${d}`));
-  backendProc.stderr.on('data', (d) => process.stderr.write(`[mrq-engine] ${d}`));
-  backendProc.on('exit', (code) => {
-    console.log(`[mrq-engine] exited with code ${code}`);
+
+  if (!fs.existsSync(cmd) && app.isPackaged) {
+    throw new Error(`Executável do motor local não encontrado em: ${cmd}`);
+  }
+
+  const logStream = fs.createWriteStream(engineLogPath, { flags: 'w' });
+  logStream.write(`[${new Date().toISOString()}] Starting: ${cmd} ${args.join(' ')}\n`);
+  logStream.write(`[${new Date().toISOString()}] CWD: ${cwd}\n`);
+  logStream.write(`[${new Date().toISOString()}] MRQ_DSP_LIB: ${env.MRQ_DSP_LIB || '(default)'}\n`);
+
+  backendProc = spawn(cmd, args, { cwd, env, stdio: 'pipe', windowsHide: true });
+
+  backendProc.stdout.on('data', (d) => {
+    const txt = d.toString();
+    logStream.write(txt);
+    process.stdout.write(`[mrq-engine] ${txt}`);
   });
-  await waitForBackend(backendPort);
+  backendProc.stderr.on('data', (d) => {
+    const txt = d.toString();
+    logStream.write(txt);
+    backendStderrTail = (backendStderrTail + txt).slice(-4000);
+    process.stderr.write(`[mrq-engine] ${txt}`);
+  });
+  backendProc.on('error', (err) => {
+    logStream.write(`[spawn error] ${err.stack || err.message}\n`);
+    backendStderrTail += `\n[spawn error] ${err.message}\n`;
+    backendExitCode = -1;
+  });
+  backendProc.on('exit', (code) => {
+    backendExitCode = code === null ? -1 : code;
+    logStream.write(`[exit] code=${backendExitCode}\n`);
+    logStream.end();
+    console.log(`[mrq-engine] exited with code ${backendExitCode}`);
+  });
+
+  await waitForBackend(backendPort, 60000);
 }
 
 function stopBackend() {
@@ -120,6 +217,13 @@ function createWindow() {
 
   mainWindow.loadURL(`http://127.0.0.1:${backendPort}`);
 
+  mainWindow.once('ready-to-show', () => {
+    if (splashWindow && !splashWindow.isDestroyed()) {
+      splashWindow.close();
+      splashWindow = null;
+    }
+  });
+
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url);
     return { action: 'deny' };
@@ -149,10 +253,15 @@ function createWindow() {
 }
 
 app.whenReady().then(async () => {
+  createSplashWindow();
   try {
     await startBackend();
     createWindow();
   } catch (err) {
+    if (splashWindow && !splashWindow.isDestroyed()) {
+      splashWindow.close();
+      splashWindow = null;
+    }
     dialog.showErrorBox('Erro ao iniciar MRQ Estudo Musical', String(err.message || err));
     app.quit();
   }
