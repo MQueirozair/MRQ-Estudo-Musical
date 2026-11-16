@@ -1,0 +1,65 @@
+{
+  "schemaVersion": "1.0.0",
+  "models": [
+    {
+      "id": "basic-pitch-onnx",
+      "name": "Basic Pitch (Transcrição Polifônica ONNX)",
+      "category": "note_detection",
+      "version": "1.0.0",
+      "size_mb": 16.8,
+      "license": "Apache-2.0",
+      "description": "Modelo neural leve da Spotify para transcrição polifônica de notas musicais, pitch bend e MIDI em piano, violão, guitarra e voz.",
+      "filename": "basic_pitch_nmp.onnx",
+      "download_url": "https://raw.githubusercontent.com/spotify/basic-pitch/main/basic_pitch/saved_models/icassp_2022/nmp.onnx",
+      "sha256": null,
+      "min_ram_mb": 512,
+      "requires_gpu": false,
+      "offline_fallback": "Motor Offline MRQ Multi-Pitch Harmonic Summation + YIN (ativo sem download)"
+    },
+    {
+      "id": "crepe-tiny-onnx",
+      "name": "CREPE Tiny (Melodia & Voz Monofônica ONNX)",
+      "category": "pitch_tracking",
+      "version": "1.0.0",
+      "size_mb": 4.9,
+      "license": "MIT",
+      "description": "Rede convolucional para rastreamento fino de melodia, voz, solo de guitarra e linha de baixo.",
+      "filename": "crepe_tiny.onnx",
+      "download_url": "https://github.com/maxrmorrison/torchcrepe/raw/master/torchcrepe/assets/tiny.pth",
+      "sha256": null,
+      "min_ram_mb": 256,
+      "requires_gpu": false,
+      "offline_fallback": "Rastreador YIN C++17 nativo com interpolação parabólica (ativo sem download)"
+    },
+    {
+      "id": "htdemucs-4stems-onnx",
+      "name": "HTDemucs 4-Stems (Separação Neural Vocal/Bateria/Baixo/Outros)",
+      "category": "source_separation",
+      "version": "4.0.0",
+      "size_mb": 168.0,
+      "license": "MIT",
+      "description": "Separador neural híbrido Transformer + U-Net de alta fidelidade para isolar Vocal, Bateria, Baixo e Outros instrumentos localmente.",
+      "filename": "htdemucs_4stems.onnx",
+      "download_url": "https://github.com/sevagh/demucs.onnx/releases/latest",
+      "sha256": null,
+      "min_ram_mb": 2048,
+      "requires_gpu": false,
+      "offline_fallback": "Motor Offline MRQ Wiener-HPSS + Center-Pan Mid/Side 4-Stems (ativo sem download)"
+    },
+    {
+      "id": "mdx-vocal-onnx",
+      "name": "MDX-Net Vocal Isolator (ONNX)",
+      "category": "source_separation",
+      "version": "1.0.0",
+      "size_mb": 66.2,
+      "license": "MIT",
+      "description": "Modelo especializado em separação limpa entre voz principal e acompanhamento instrumental.",
+      "filename": "mdx_vocal.onnx",
+      "download_url": "https://github.com/kuielab/mdx-net-submission/releases",
+      "sha256": null,
+      "min_ram_mb": 1024,
+      "requires_gpu": false,
+      "offline_fallback": "Motor Offline MRQ Center-Pan Vocal Masking (ativo sem download)"
+    }
+  ]
+}
