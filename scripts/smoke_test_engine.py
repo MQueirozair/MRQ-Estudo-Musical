@@ -100,9 +100,9 @@ def main() -> int:
                 print(f"[smoke] GET /api/projects OK (demo id={pid})")
 
             # Check Waveform C++17 DSP
-            with urllib.request.urlopen(f"{base}/api/projects/{pid}/waveform?bins=120", timeout=10.0) as resp:
+            with urllib.request.urlopen(f"{base}/api/projects/{pid}/waveform?bins=400", timeout=10.0) as resp:
                 wf = json.loads(resp.read().decode("utf-8"))
-                assert wf["bins"] == 120 and len(wf["max"]) == 120
+                assert wf["bins"] == 400 and len(wf["max"]) == 400
                 print(f"[smoke] GET /waveform OK ({wf['bins']} bins)")
 
             # Check Time-Stretched + Pitch-Shifted Audio Range 206
@@ -117,6 +117,9 @@ def main() -> int:
 
             print("[smoke] ALL FROZEN ENGINE SMOKE CHECKS PASSED!")
             return 0
+        except Exception as exc:
+            print(f"::error::[smoke] Exception: {exc}")
+            raise
         finally:
             if proc.poll() is None:
                 proc.terminate()
