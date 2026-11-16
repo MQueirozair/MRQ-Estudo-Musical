@@ -1,0 +1,85 @@
+{
+  "name": "MRQ Estudo Musical",
+  "slug": "mrq-estudo-musical",
+  "version": "1.0.0",
+  "versionCode": 10000,
+  "releaseChannel": "stable",
+  "author": "MRQ Audio Engineering",
+  "license": "MIT",
+  "repository": "https://github.com/MQueirozair/MRQ-Estudo-Musical",
+  "architecture": {
+    "dspCore": {
+      "language": "C++17",
+      "abi": "C99 (extern \"C\")",
+      "libraryName": "mrq_dsp",
+      "features": [
+        "phase_vocoder_time_stretch",
+        "wsola_transient_preservation",
+        "independent_pitch_shift",
+        "radix2_fft_spectrogram",
+        "multi_resolution_waveform_peaks",
+        "yin_pitch_tracker",
+        "spectral_flux_onset",
+        "smf_midi_writer"
+      ]
+    },
+    "audioService": {
+      "runtime": "Python 3.11+",
+      "codecEngine": "FFmpeg via PyAV (LGPL-compatible dynamic/wheel distribution)",
+      "aiRuntime": "ONNX Runtime (local offline inference)",
+      "database": "SQLite 3 (WAL mode + crash recovery)",
+      "pdfEngine": "ReportLab",
+      "apiProtocol": "REST + Range Streaming + WebSocket"
+    },
+    "ui": {
+      "framework": "React 19 + TypeScript + Vite + Tailwind CSS + Canvas 2D + Web Audio API",
+      "desktopShell": "Electron 33 + electron-builder (Windows EXE/MSI, macOS DMG/APP, Linux AppImage)",
+      "mobileShell": "Capacitor 6 + Android Gradle + JNI/NDK (Android APK/AAB)"
+    }
+  },
+  "dependencies": {
+    "python": ">=3.11",
+    "node": ">=20.0.0",
+    "cppCompiler": "GCC 12+ / Clang 15+ / MSVC 2022+",
+    "cmake": ">=3.20"
+  },
+  "supportedAudioImportFormats": [
+    "mp3",
+    "wav",
+    "m4a",
+    "flac",
+    "aac",
+    "ogg",
+    "aiff"
+  ],
+  "supportedExportFormats": [
+    "mp3",
+    "wav",
+    "flac",
+    "mid",
+    "txt_notes",
+    "txt_chords",
+    "pdf_report"
+  ],
+  "platforms": {
+    "windows": {
+      "targets": ["nsis-exe", "msi"],
+      "arch": ["x64"]
+    },
+    "macos": {
+      "targets": ["dmg", "app"],
+      "arch": ["arm64", "x64"]
+    },
+    "android": {
+      "targets": ["apk", "aab"],
+      "minSdk": 24,
+      "targetSdk": 35,
+      "abiFilters": ["arm64-v8a", "armeabi-v7a"]
+    },
+    "linux": {
+      "targets": ["AppImage"],
+      "arch": ["x64"]
+    }
+  },
+  "updateCheckUrl": "https://api.github.com/repos/MQueirozair/MRQ-Estudo-Musical/releases/latest"
+}
