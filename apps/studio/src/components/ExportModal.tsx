@@ -1,0 +1,287 @@
+import React, { useState } from 'react';
+import { Download, FileAudio, FileText, FileMusic, FileCheck2, X, Loader2 } from 'lucide-react';
+import type { ProjectData, StemKey, StemMixerState } from '../types/music';
+import { formatTime } from '../data/chordDiagrams';
+
+interface ExportModalProps {
+  open: boolean;
+  project: ProjectData;
+  speed: number;
+  semitones: number;
+  octaves: number;
+  cents: number;
+  loopA: number;
+  loopB: number;
+  stemMixer: StemMixerState;
+  defaultScope?: 'full' | 'loop' | 'stem' | 'stems_mix';
+  defaultStemKey?: StemKey;
+  onClose: () => void;
+  onRunExport: (payload: Record<string, any>, fallbackName: string) => Promise<void>;
+}
+
+export const ExportModal: React.FC<ExportModalProps> = ({
+  open,
+  project,
+  speed,
+  semitones,
+  octaves,
+  cents,
+  loopA,
+  loopB,
+  stemMixer,
+  defaultScope = 'full',
+  defaultStemKey = 'vocals',
+  onClose,
+  onRunExport,
+}) => {
+  const [format, setFormat] = useState<'mp3' | 'wav' | 'flac' | 'mid' | 'txt_notes' | 'txt_chords' | 'pdf'>('mp3');
+  const [scope, setScope] = useState<'full' | 'loop' | 'selection' | 'stem' | 'stems_mix'>(defaultScope);
+  const [stemKey, setStemKey] = useState<StemKey>(defaultStemKey);
+  const [applyDsp, setApplyDsp] = useState(true);
+  const [customA, setCustomA] = useState(loopA);
+  const [customB, setCustomB] = useState(loopB > loopA ? loopB : project.duration_sec);
+  const [busy, setBusy] = useState(false);
+
+  React.useEffect(() => {
+    if (open) {
+      setScope(defaultScope);
+      setStemKey(defaultStemKey);
+      setCustomA(loopA);
+      setCustomB(loopB > loopA ? loopB : project.duration_sec);
+    }
+  }, [open, defaultScope, defaultStemKey, loopA, loopB, project.duration_sec]);
+
+  if (!open) return null;
+
+  const isAudioFmt = format === 'mp3' || format === 'wav' || format === 'flac';
+  const totalSt = semitones + octaves * 12;
+  const hasStems = Boolean(project.analysis?.stems?.stems?.vocals);
+
+  const handleSubmit = async () => {
+    setBusy(true);
+    try {
+      const payload: Record<string, any> = {
+        format,
+        scope: isAudioFmt ? scope : 'full',
+        speed: applyDsp ? speed : 1.0,
+        semitones: applyDsp ? totalSt : 0,
+        cents: applyDsp ? cents : 0,
+      };
+      if (isAudioFmt && scope === 'loop') {
+        payload.start_sec = loopA;
+        payload.end_sec = loopB > loopA ? loopB : project.duration_sec;
+      } else if (isAudioFmt && scope === 'selection') {
+        payload.start_sec = customA;
+        payload.end_sec = customB;
+      } else if (isAudioFmt && scope === 'stem') {
+        payload.stem_key = stemKey;
+      } else if (isAudioFmt && scope === 'stems_mix') {
+        payload.stem_gains = stemMixer.volumes;
+        payload.stem_mutes = stemMixer.mutes;
+      }
+
+      const ext = format === 'txt_notes' || format === 'txt_chords' ? 'txt' : format;
+      await onRunExport(payload, `${project.name}.${ext}`);
+      onClose();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const formatOptions: Array<{ id: typeof format; label: string; desc: string; Icon: React.FC<any> }> = [
+    { id: 'mp3', label: 'MP3 (192 kbps)', desc: 'Compacto para celular e estudo portátil', Icon: FileAudio },
+    { id: 'wav', label: 'WAV (PCM 16-bit)', desc: 'Sem perdas, máxima qualidade', Icon: FileAudio },
+    { id: 'flac', label: 'FLAC (Lossless)', desc: 'Compressão sem perdas', Icon: FileAudio },
+    { id: 'mid', label: 'MIDI (.mid)', desc: 'Transcrição editada do Piano Roll (SMF)', Icon: FileMusic },
+    { id: 'txt_notes', label: 'Notas (TXT)', desc: 'Tabela completa de notas, tempos e confiança', Icon: FileText },
+    { id: 'txt_chords', label: 'Cifras (TXT)', desc: 'Progressão harmônica com marcadores', Icon: FileText },
+    { id: 'pdf', label: 'Relatório PDF', desc: 'Análise musical completa formatada', Icon: FileCheck2 },
+  ];
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+      <div className="bg-[#0F172A] border border-slate-700 rounded-2xl w-full max-w-xl overflow-hidden shadow-2xl">
+        <div className="px-4 py-3 border-b border-slate-800 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Download className="w-4 h-4 text-emerald-400" />
+            <h2 className="text-sm font-bold text-white">Exportar Áudio, MIDI, Cifras & Relatório</h2>
+          </div>
+          <button type="button" onClick={onClose} className="p-1 rounded-lg hover:bg-slate-800 text-slate-400">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <div className="p-4 space-y-4 max-h-[78vh] overflow-y-auto">
+          {/* Format Grid */}
+          <div>
+            <label className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block mb-2">
+              1. Escolha o Formato de Saída
+            </label>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+              {formatOptions.map(({ id, label, desc, Icon }) => (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => setFormat(id)}
+                  className={`p-2.5 rounded-xl border text-left transition ${
+                    format === id
+                      ? 'bg-emerald-500/15 border-emerald-400 text-white'
+                      : 'bg-slate-950/70 border-slate-800 text-slate-300 hover:border-slate-600'
+                  }`}
+                >
+                  <div className="flex items-center gap-1.5 text-xs font-bold">
+                    <Icon className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>{label}</span>
+                  </div>
+                  <div className="text-[10px] text-slate-400 mt-0.5 leading-snug">{desc}</div>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Audio Scope Options */}
+          {isAudioFmt && (
+            <div className="space-y-3 bg-slate-950/70 border border-slate-800 rounded-xl p-3">
+              <label className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block">
+                2. Conteúdo & Processamento DSP
+              </label>
+
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 text-xs">
+                <button
+                  type="button"
+                  onClick={() => setScope('full')}
+                  className={`py-1.5 px-2 rounded-lg border ${
+                    scope === 'full' ? 'bg-sky-500/20 border-sky-400 text-sky-200 font-bold' : 'bg-slate-900 border-slate-800 text-slate-400'
+                  }`}
+                >
+                  Música Completa
+                </button>
+                <button
+                  type="button"
+                  disabled={loopB <= loopA + 0.05}
+                  onClick={() => setScope('loop')}
+                  className={`py-1.5 px-2 rounded-lg border disabled:opacity-40 ${
+                    scope === 'loop' ? 'bg-sky-500/20 border-sky-400 text-sky-200 font-bold' : 'bg-slate-900 border-slate-800 text-slate-400'
+                  }`}
+                >
+                  Loop A→B
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setScope('selection')}
+                  className={`py-1.5 px-2 rounded-lg border ${
+                    scope === 'selection' ? 'bg-sky-500/20 border-sky-400 text-sky-200 font-bold' : 'bg-slate-900 border-slate-800 text-slate-400'
+                  }`}
+                >
+                  Trecho Manual
+                </button>
+                <button
+                  type="button"
+                  disabled={!hasStems}
+                  onClick={() => setScope('stem')}
+                  className={`py-1.5 px-2 rounded-lg border disabled:opacity-40 ${
+                    scope === 'stem' ? 'bg-purple-500/20 border-purple-400 text-purple-200 font-bold' : 'bg-slate-900 border-slate-800 text-slate-400'
+                  }`}
+                >
+                  Stem Isolado
+                </button>
+                <button
+                  type="button"
+                  disabled={!hasStems}
+                  onClick={() => setScope('stems_mix')}
+                  className={`py-1.5 px-2 rounded-lg border disabled:opacity-40 ${
+                    scope === 'stems_mix' ? 'bg-purple-500/20 border-purple-400 text-purple-200 font-bold' : 'bg-slate-900 border-slate-800 text-slate-400'
+                  }`}
+                >
+                  Mix de Stems
+                </button>
+              </div>
+
+              {scope === 'loop' && (
+                <div className="text-xs font-mono text-sky-300">
+                  Trecho do Loop: {formatTime(loopA)} → {formatTime(loopB)}
+                </div>
+              )}
+
+              {scope === 'selection' && (
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div>
+                    <span className="text-slate-400 text-[10px]">Início (s)</span>
+                    <input
+                      type="number"
+                      step={0.1}
+                      min={0}
+                      max={project.duration_sec}
+                      value={customA}
+                      onChange={(e) => setCustomA(parseFloat(e.target.value) || 0)}
+                      className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 font-mono text-white"
+                    />
+                  </div>
+                  <div>
+                    <span className="text-slate-400 text-[10px]">Fim (s)</span>
+                    <input
+                      type="number"
+                      step={0.1}
+                      min={0}
+                      max={project.duration_sec}
+                      value={customB}
+                      onChange={(e) => setCustomB(parseFloat(e.target.value) || 0)}
+                      className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 font-mono text-white"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {scope === 'stem' && (
+                <select
+                  value={stemKey}
+                  onChange={(e) => setStemKey(e.target.value as StemKey)}
+                  className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white"
+                >
+                  <option value="vocals">Vocal</option>
+                  <option value="drums">Bateria</option>
+                  <option value="bass">Baixo</option>
+                  <option value="other">Outros Instrumentos</option>
+                </select>
+              )}
+
+              {scope !== 'stems_mix' && (
+                <label className="flex items-center gap-2 text-xs text-slate-200 cursor-pointer pt-1">
+                  <input
+                    type="checkbox"
+                    checked={applyDsp}
+                    onChange={(e) => setApplyDsp(e.target.checked)}
+                    className="rounded"
+                  />
+                  <span>
+                    Aplicar velocidade ({Math.round(speed * 100)}%) e afinação ({totalSt >= 0 ? `+${totalSt}` : totalSt} st,{' '}
+                    {cents >= 0 ? `+${cents}` : cents}¢)
+                  </span>
+                </label>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div className="px-4 py-3 border-t border-slate-800 flex items-center justify-end gap-2 bg-slate-950/60">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs text-slate-300"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={handleSubmit}
+            className="px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-xs font-bold flex items-center gap-1.5"
+          >
+            {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+            <span>{busy ? 'Renderizando...' : 'Exportar Agora'}</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
