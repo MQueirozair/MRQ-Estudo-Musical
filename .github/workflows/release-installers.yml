@@ -1,0 +1,111 @@
+name: Release — Instaladores Multiplataforma (Windows, macOS, Android, Linux)
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build-windows:
+    name: Windows x64 (.EXE NSIS + .MSI)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Build Windows DSP, Sidecar and Installers
+        shell: pwsh
+        run: .\installers\windows\build_windows.ps1
+      - name: Upload Windows Installers
+        uses: actions/upload-artifact@v4
+        with:
+          name: MRQ-Estudo-Musical-Windows-x64
+          path: |
+            apps/desktop/release/*.exe
+            apps/desktop/release/*.msi
+
+  build-macos:
+    name: macOS Universal (.APP + .DMG)
+    runs-on: macos-14
+    env:
+      APPLE_ID: ${{ secrets.APPLE_ID }}
+      APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Build macOS Universal DSP, App & DMG
+        run: bash installers/macos/build_macos.sh
+      - name: Upload macOS DMG & ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: MRQ-Estudo-Musical-macOS-Universal
+          path: |
+            apps/desktop/release/*.dmg
+            apps/desktop/release/*.zip
+
+  build-android:
+    name: Android (.APK + .AAB with C++17 NDK JNI)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: android-actions/setup-android@v3
+      - name: Install Android NDK & CMake
+        run: sdkmanager "ndk;26.3.11579264" "cmake;3.22.1" "platforms;android-35" "build-tools;35.0.0"
+      - name: Build Android APK & AAB
+        run: bash installers/android/build_android.sh
+      - name: Upload Android APK & AAB
+        uses: actions/upload-artifact@v4
+        with:
+          name: MRQ-Estudo-Musical-Android
+          path: |
+            apps/android/android/app/build/outputs/apk/release/*.apk
+            apps/android/android/app/build/outputs/bundle/release/*.aab
+
+  build-linux:
+    name: Linux x64 (.AppImage)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Build Linux DSP, Sidecar & AppImage
+        run: |
+          make -C core test
+          npm --prefix apps/studio ci && npm --prefix apps/studio run build
+          pip install -r requirements.txt pyinstaller
+          pyinstaller --noconfirm --onefile --name mrq-engine \
+            --add-data "database/schema.sql:database" \
+            --add-data "models/manifest.json:models" \
+            --add-data "app.config.json:." \
+            --add-data "apps/studio/dist:apps/studio/dist" \
+            --distpath "apps/desktop/backend-dist" \
+            backend/main.py
+          npm --prefix apps/desktop ci
+          npm --prefix apps/desktop run dist:linux
+      - name: Upload Linux AppImage
+        uses: actions/upload-artifact@v4
+        with:
+          name: MRQ-Estudo-Musical-Linux-x64
+          path: apps/desktop/release/*.AppImage
