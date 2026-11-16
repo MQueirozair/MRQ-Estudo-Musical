@@ -44,9 +44,9 @@ apps/android/android/local.properties
 *.AppImage
 
 # Local Runtime Data, Temp Files & Databases
-data/
-tmp/
-temp/
+/data/
+/tmp/
+/temp/
 *.db
 *.db-shm
 *.db-wal
