@@ -233,9 +233,9 @@ class ProjectRepository:
         for mk in orig["markers"]:
             self.upsert_marker(new_id, {**mk, "id": None})
         if orig["notes"]:
-            self.replace_notes(new_id, orig["notes"])
+            self.replace_notes(new_id, [{**n, "id": None} for n in orig["notes"]])
         if orig["chords"]:
-            self.replace_chords(new_id, orig["chords"])
+            self.replace_chords(new_id, [{**c, "id": None} for c in orig["chords"]])
         for kind, payload in orig["analysis"].items():
             self.save_analysis_cache(new_id, kind, payload)
         return self.get_project(new_id)
