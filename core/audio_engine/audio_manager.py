@@ -211,9 +211,15 @@ class AudioManager:
 
         pcm, sr = self.load_pcm(resolved)
         if start_sec is not None or end_sec is not None:
+            total_dur = pcm.shape[0] / float(sr)
             s_idx = max(0, int(round((start_sec or 0.0) * sr)))
             e_idx = pcm.shape[0] if end_sec is None else min(pcm.shape[0], int(round(end_sec * sr)))
-            pcm = pcm[s_idx:e_idx] if e_idx > s_idx else pcm[:1]
+            if e_idx - s_idx < 64:
+                raise ValueError(
+                    f"Trecho selecionado ({start_sec or 0.0:.2f}s → {end_sec if end_sec is not None else total_dur:.2f}s) "
+                    f"está fora da duração do áudio ({total_dur:.2f}s). Ajuste os pontos A/B antes de exportar."
+                )
+            pcm = pcm[s_idx:e_idx]
 
         processed = self.dsp.time_and_pitch(
             pcm,

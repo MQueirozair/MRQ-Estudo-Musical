@@ -861,46 +861,76 @@ def create_app(data_dir: Optional[str | Path] = None) -> FastAPI:
 
         if fmt in ("mp3", "wav", "flac"):
             out_path = audio_mgr.exports_dir / f"{safe_name}_{req.scope}_{ts}.{fmt}"
-            if req.scope == "stem":
-                stem_key = req.stem_key or "vocals"
-                stem_file = audio_mgr.stems_dir / project_id / f"{stem_key}.wav"
-                if not stem_file.exists():
-                    raise HTTPException(status_code=404, detail=f"Stem '{stem_key}' não encontrado.")
-                exporter.export_audio(
-                    stem_file,
-                    out_path,
-                    fmt=fmt,
-                    speed=req.speed,
-                    semitones=req.semitones,
-                    cents=req.cents,
-                    start_sec=req.start_sec,
-                    end_sec=req.end_sec,
-                )
-            elif req.scope == "stems_mix":
-                stem_dir = audio_mgr.stems_dir / project_id
-                paths = {k: stem_dir / f"{k}.wav" for k in ("vocals", "drums", "bass", "other") if (stem_dir / f"{k}.wav").exists()}
-                if not paths:
-                    raise HTTPException(status_code=404, detail="Separe os stems antes de exportar o mix.")
-                exporter.export_stems_mix(
-                    paths,
-                    gains=req.stem_gains or {},
-                    mutes=req.stem_mutes or {},
-                    output_path=out_path,
-                    fmt=fmt,
-                )
-            else:
-                if not proj.get("audio_file_path"):
-                    raise HTTPException(status_code=400, detail="Projeto sem áudio para exportar.")
-                exporter.export_audio(
-                    proj["audio_file_path"],
-                    out_path,
-                    fmt=fmt,
-                    speed=req.speed,
-                    semitones=req.semitones,
-                    cents=req.cents,
-                    start_sec=req.start_sec if req.scope in ("selection", "loop") else None,
-                    end_sec=req.end_sec if req.scope in ("selection", "loop") else None,
-                )
+            try:
+                if req.scope == "stem":
+                    stem_key = req.stem_key or "vocals"
+                    stem_file = audio_mgr.stems_dir / project_id / f"{stem_key}.wav"
+                    if not stem_file.exists():
+                        raise HTTPException(status_code=404, detail=f"Stem '{stem_key}' não encontrado.")
+                    exporter.export_audio(
+                        stem_file,
+                        out_path,
+                        fmt=fmt,
+                        speed=req.speed,
+                        semitones=req.semitones,
+                        cents=req.cents,
+                        start_sec=req.start_sec,
+                        end_sec=req.end_sec,
+                    )
+                elif req.scope == "stems_mix":
+                    stem_dir = audio_mgr.stems_dir / project_id
+                    paths = {
+                        k: stem_dir / f"{k}.wav"
+                        for k in ("vocals", "drums", "bass", "other")
+                        if (stem_dir / f"{k}.wav").exists()
+                    }
+                    if not paths:
+                        raise HTTPException(status_code=404, detail="Separe os stems antes de exportar o mix.")
+                    needs_dsp = (
+                        abs(req.speed - 1.0) > 1e-4
+                        or abs(req.semitones) > 1e-4
+                        or abs(req.cents) > 1e-4
+                    )
+                    if needs_dsp:
+                        tmp_mix = audio_mgr.cache_dir / f"stems_mix_raw_{project_id}_{ts}.wav"
+                        exporter.export_stems_mix(
+                            paths,
+                            gains=req.stem_gains or {},
+                            mutes=req.stem_mutes or {},
+                            output_path=tmp_mix,
+                            fmt="wav",
+                        )
+                        exporter.export_audio(
+                            tmp_mix,
+                            out_path,
+                            fmt=fmt,
+                            speed=req.speed,
+                            semitones=req.semitones,
+                            cents=req.cents,
+                        )
+                    else:
+                        exporter.export_stems_mix(
+                            paths,
+                            gains=req.stem_gains or {},
+                            mutes=req.stem_mutes or {},
+                            output_path=out_path,
+                            fmt=fmt,
+                        )
+                else:
+                    if not proj.get("audio_file_path"):
+                        raise HTTPException(status_code=400, detail="Projeto sem áudio para exportar.")
+                    exporter.export_audio(
+                        proj["audio_file_path"],
+                        out_path,
+                        fmt=fmt,
+                        speed=req.speed,
+                        semitones=req.semitones,
+                        cents=req.cents,
+                        start_sec=req.start_sec if req.scope in ("selection", "loop") else None,
+                        end_sec=req.end_sec if req.scope in ("selection", "loop") else None,
+                    )
+            except ValueError as exc:
+                raise HTTPException(status_code=400, detail=str(exc))
             mime_map = {"mp3": "audio/mpeg", "wav": "audio/wav", "flac": "audio/flac"}
             return FileResponse(str(out_path), media_type=mime_map[fmt], filename=out_path.name)
 

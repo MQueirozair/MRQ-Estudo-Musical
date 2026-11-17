@@ -174,8 +174,11 @@ export default function App() {
         setCurrentTime(0);
 
         if (p.loops.length > 0) {
-          setLoopA(p.loops[0].start_sec);
-          setLoopB(p.loops[0].end_sec);
+          const maxDur = p.duration_sec > 0 ? p.duration_sec : p.loops[0].end_sec;
+          const a = Math.max(0, Math.min(p.loops[0].start_sec, maxDur));
+          const b = Math.max(a, Math.min(p.loops[0].end_sec, maxDur));
+          setLoopA(a);
+          setLoopB(b);
           setLoopEnabled(false);
         } else {
           setLoopA(0);
@@ -364,10 +367,13 @@ export default function App() {
     async (kind: 'full' | 'bpm' | 'key' | 'notes' | 'chords') => {
       if (!project?.id || !project.audio_file_path) {
         if (project?.source_type === 'youtube') {
-          setBottomTab('stems');
+          setCaptureBarOpen(true);
+          window.setTimeout(() => {
+            captureBarRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }, 60);
           showToast(
             'info',
-            'Para rodar Análise IA neste vídeo do YouTube, clique em "Vincular Áudio (IA/Stems)" ou grave pelo Microfone/Interface.'
+            'Para rodar Análise IA neste vídeo, clique em "Iniciar Captura" (Som do Sistema) ou vincule um arquivo de áudio.'
           );
         } else {
           showToast('info', 'Importe um arquivo de áudio ou vídeo primeiro.');
@@ -406,12 +412,18 @@ export default function App() {
   // 4-Stem Separation Runner with real progress polling
   const handleSeparateStems = useCallback(async () => {
     if (!project?.id || !project.audio_file_path) {
-      showToast(
-        'info',
-        project?.source_type === 'youtube'
-          ? 'Separação em 4 Stems requer arquivo de áudio local (o Player oficial do YouTube não baixa mídia).'
-          : 'Importe um áudio antes de separar stems.'
-      );
+      if (project?.source_type === 'youtube') {
+        setCaptureBarOpen(true);
+        window.setTimeout(() => {
+          captureBarRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }, 60);
+        showToast(
+          'info',
+          'Capture o Som do Sistema (WASAPI) ou vincule um áudio local para liberar a Separação em 4 Stems.'
+        );
+      } else {
+        showToast('info', 'Importe um áudio antes de separar stems.');
+      }
       return;
     }
     setBottomTab('stems');
@@ -577,11 +589,17 @@ export default function App() {
   );
 
   const openSystemCapture = useCallback(() => {
+    // If recapturing on a Hybrid YouTube project, switch back to YouTube audio so the video unmutes for loopback capture
+    if (isYouTubeMode && ytAudioSource === 'dsp') {
+      engineRef.current?.pause();
+      setIsPlaying(false);
+      setYtAudioSource('youtube');
+    }
     setCaptureBarOpen(true);
     window.setTimeout(() => {
       captureBarRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }, 60);
-  }, []);
+  }, [isYouTubeMode, ytAudioSource]);
 
   // Attach captured system audio (WASAPI loopback / stereo input) to current project or create new project
   const handleCapturedSystemAudio = useCallback(
@@ -1192,6 +1210,7 @@ export default function App() {
           onOpenLocalAudio={() =>
             isYouTubeMode ? attachAudioInputRef.current?.click() : fileInputRef.current?.click()
           }
+          onOpenSystemCapture={openSystemCapture}
           onSpeedChange={(spd) => {
             setSpeed(spd);
             void saveProjectParams({ speed: spd });

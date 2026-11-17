@@ -1,5 +1,5 @@
 import React from 'react';
-import { FolderOpen, Gauge, Music2, RotateCcw, Minus, Plus } from 'lucide-react';
+import { FolderOpen, Gauge, Music2, Radio, RotateCcw, Minus, Plus } from 'lucide-react';
 
 const SPEED_PRESETS = [0.25, 0.35, 0.5, 0.6, 0.75, 0.85, 1.0, 1.25, 1.5, 2.0];
 const YOUTUBE_SPEED_PRESETS = [0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0];
@@ -12,6 +12,7 @@ interface SpeedPitchPanelProps {
   processingAudio: boolean;
   isYouTubeMode?: boolean;
   onOpenLocalAudio?: () => void;
+  onOpenSystemCapture?: () => void;
   onSpeedChange: (speed: number) => void;
   onSemitonesChange: (st: number) => void;
   onOctavesChange: (oct: number) => void;
@@ -27,6 +28,7 @@ export const SpeedPitchPanel: React.FC<SpeedPitchPanelProps> = ({
   processingAudio,
   isYouTubeMode = false,
   onOpenLocalAudio,
+  onOpenSystemCapture,
   onSpeedChange,
   onSemitonesChange,
   onOctavesChange,
@@ -142,18 +144,31 @@ export const SpeedPitchPanel: React.FC<SpeedPitchPanelProps> = ({
             </p>
             <div className="flex flex-wrap items-center justify-between gap-2">
               <span className="text-[11px] text-slate-400">
-                Vincule um áudio/vídeo a este projeto para liberar Pitch ±12 st, IA e 4 Stems sincronizados ao vídeo:
+                Capture o <strong className="text-emerald-300">Som do Sistema</strong> ou vincule um áudio para liberar
+                Pitch ±12 st, Forma de Onda, IA e 4 Stems:
               </span>
-              {onOpenLocalAudio && (
-                <button
-                  type="button"
-                  onClick={onOpenLocalAudio}
-                  className="px-3 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-500 text-white text-xs font-semibold flex items-center gap-1.5 shrink-0 transition"
-                >
-                  <FolderOpen className="w-3.5 h-3.5" />
-                  <span>Vincular Áudio / Vídeo</span>
-                </button>
-              )}
+              <div className="flex flex-wrap items-center gap-1.5">
+                {onOpenSystemCapture && (
+                  <button
+                    type="button"
+                    onClick={onOpenSystemCapture}
+                    className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-1.5 shrink-0 transition"
+                  >
+                    <Radio className="w-3.5 h-3.5" />
+                    <span>Capturar Som do Sistema</span>
+                  </button>
+                )}
+                {onOpenLocalAudio && (
+                  <button
+                    type="button"
+                    onClick={onOpenLocalAudio}
+                    className="px-3 py-1.5 rounded-lg bg-sky-600/20 hover:bg-sky-600/30 border border-sky-500/40 text-sky-200 text-xs font-semibold flex items-center gap-1.5 shrink-0 transition"
+                  >
+                    <FolderOpen className="w-3.5 h-3.5" />
+                    <span>Vincular Arquivo</span>
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         ) : (

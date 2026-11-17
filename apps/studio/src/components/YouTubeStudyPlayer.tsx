@@ -203,6 +203,15 @@ export const YouTubeStudyPlayer = forwardRef<YouTubeStudyPlayerHandle, YouTubeSt
     const volumeRef = useRef({ volume, muted });
     volumeRef.current = { volume, muted };
 
+    const onDurationReadyRef = useRef(onDurationReady);
+    onDurationReadyRef.current = onDurationReady;
+
+    const onPlayStateChangeRef = useRef(onPlayStateChange);
+    onPlayStateChangeRef.current = onPlayStateChange;
+
+    const onPrecountTickRef = useRef(onPrecountTick);
+    onPrecountTickRef.current = onPrecountTick;
+
     const precountTimersRef = useRef<number[]>([]);
     const precountBusyRef = useRef(false);
 
@@ -210,8 +219,8 @@ export const YouTubeStudyPlayer = forwardRef<YouTubeStudyPlayerHandle, YouTubeSt
       precountTimersRef.current.forEach((id) => window.clearTimeout(id));
       precountTimersRef.current = [];
       precountBusyRef.current = false;
-      onPrecountTick(0);
-    }, [onPrecountTick]);
+      onPrecountTickRef.current(0);
+    }, []);
 
     const runWithPrecount = useCallback(
       (action: () => void) => {
@@ -226,19 +235,19 @@ export const YouTubeStudyPlayer = forwardRef<YouTubeStudyPlayerHandle, YouTubeSt
         const stepMs = (pc * 1000) / steps;
         for (let i = 0; i < steps; i++) {
           const timerId = window.setTimeout(() => {
-            onPrecountTick(Number((pc - (i * stepMs) / 1000).toFixed(1)));
+            onPrecountTickRef.current(Number((pc - (i * stepMs) / 1000).toFixed(1)));
             playClickSound(i === 0);
           }, i * stepMs);
           precountTimersRef.current.push(timerId);
         }
         const finalId = window.setTimeout(() => {
           precountBusyRef.current = false;
-          onPrecountTick(0);
+          onPrecountTickRef.current(0);
           action();
         }, pc * 1000);
         precountTimersRef.current.push(finalId);
       },
-      [clearPrecount, onPrecountTick]
+      [clearPrecount]
     );
 
     // Initialize official YouTube IFrame Player whenever videoId or reloadSeed changes
@@ -296,11 +305,11 @@ export const YouTubeStudyPlayer = forwardRef<YouTubeStudyPlayerHandle, YouTubeSt
                 }
                 setPlayerReady(true);
                 const dur = Number(ev.target.getDuration?.() || 0);
-                if (dur > 0) onDurationReady(dur);
+                if (dur > 0) onDurationReadyRef.current(dur);
                 try {
                   ev.target.setPlaybackRate(speedRef.current);
                   ev.target.setVolume(Math.round(volumeRef.current.volume * 100));
-                  if (volumeRef.current.muted) ev.target.mute();
+                  if (volumeRef.current.muted || isDspMasterRef.current) ev.target.mute();
                   else ev.target.unMute();
                 } catch {
                   // ignore
@@ -311,7 +320,7 @@ export const YouTubeStudyPlayer = forwardRef<YouTubeStudyPlayerHandle, YouTubeSt
                 const YTState = window.YT?.PlayerState;
                 if (!YTState) return;
                 const dur = Number(ev.target.getDuration?.() || 0);
-                if (dur > 0) onDurationReady(dur);
+                if (dur > 0) onDurationReadyRef.current(dur);
 
                 if (isDspMasterRef.current) {
                   // In hybrid DSP/Stems mode, MRQPlaybackEngine owns play state; keep YouTube muted
@@ -324,14 +333,14 @@ export const YouTubeStudyPlayer = forwardRef<YouTubeStudyPlayerHandle, YouTubeSt
                 }
 
                 if (ev.data === YTState.PLAYING) {
-                  onPlayStateChange(true);
+                  onPlayStateChangeRef.current(true);
                   try {
                     ev.target.setPlaybackRate(speedRef.current);
                   } catch {
                     // ignore
                   }
                 } else if (ev.data === YTState.PAUSED || ev.data === YTState.ENDED) {
-                  onPlayStateChange(false);
+                  onPlayStateChangeRef.current(false);
                   if (
                     ev.data === YTState.ENDED &&
                     loopRef.current.enabled &&
@@ -381,7 +390,7 @@ export const YouTubeStudyPlayer = forwardRef<YouTubeStudyPlayerHandle, YouTubeSt
         }
         playerRef.current = null;
       };
-    }, [videoId, reloadSeed, clearPrecount, onDurationReady, onPlayStateChange, runWithPrecount]);
+    }, [videoId, reloadSeed, clearPrecount, runWithPrecount]);
 
     // Sync speed changes directly to YouTube IFrame Player
     useEffect(() => {
