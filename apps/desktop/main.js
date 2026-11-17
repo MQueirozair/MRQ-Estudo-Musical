@@ -1,9 +1,12 @@
-const { app, BrowserWindow, Menu, shell, dialog } = require('electron');
+const { app, BrowserWindow, Menu, shell, dialog, session } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const net = require('net');
 const http = require('http');
 const { spawn } = require('child_process');
+
+// Allow smooth Web Audio metronome & YouTube IFrame API playback inside desktop shell
+app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
 
 let mainWindow = null;
 let splashWindow = null;
@@ -253,6 +256,29 @@ function createWindow() {
 }
 
 app.whenReady().then(async () => {
+  // Ensure official YouTube IFrame Player embeds always receive a valid Referer header (prevents YT Error 153)
+  try {
+    session.defaultSession.webRequest.onBeforeSendHeaders(
+      {
+        urls: [
+          'https://www.youtube.com/embed/*',
+          'https://www.youtube-nocookie.com/embed/*',
+          'https://www.youtube.com/iframe_api*',
+          'https://www.youtube.com/s/player/*',
+        ],
+      },
+      (details, callback) => {
+        const headers = { ...details.requestHeaders };
+        if (!headers['Referer'] || headers['Referer'].startsWith('file://')) {
+          headers['Referer'] = `http://127.0.0.1:${backendPort}/`;
+        }
+        callback({ requestHeaders: headers });
+      }
+    );
+  } catch {
+    // ignore if webRequest unavailable
+  }
+
   createSplashWindow();
   try {
     await startBackend();

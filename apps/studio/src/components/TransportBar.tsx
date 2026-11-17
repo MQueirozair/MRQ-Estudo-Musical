@@ -1,5 +1,7 @@
 import React from 'react';
 import {
+  Activity,
+  Flag,
   Play,
   Pause,
   Square,
@@ -45,6 +47,8 @@ interface TransportBarProps {
   onPrecountChange: (sec: number) => void;
   onTapTempo: () => void;
   onApplyTapBpm: () => void;
+  onAddMarkerNow?: () => void;
+  onAddBeatNow?: () => void;
 }
 
 export const TransportBar: React.FC<TransportBarProps> = ({
@@ -69,6 +73,8 @@ export const TransportBar: React.FC<TransportBarProps> = ({
   onPrecountChange,
   onTapTempo,
   onApplyTapBpm,
+  onAddMarkerNow,
+  onAddBeatNow,
 }) => {
   return (
     <div className="bg-[#0F172A] border border-slate-800 rounded-xl px-3 py-2.5 flex flex-wrap items-center justify-between gap-3">
@@ -138,6 +144,32 @@ export const TransportBar: React.FC<TransportBarProps> = ({
             {loopB > loopA + 0.05 ? `A ${formatTime(loopA, false)} → B ${formatTime(loopB, false)}` : 'Loop A/B'}
           </span>
         </button>
+
+        {onAddMarkerNow && (
+          <button
+            type="button"
+            onClick={onAddMarkerNow}
+            className="px-2.5 py-2 rounded-lg text-xs font-semibold flex items-center gap-1.5 border bg-slate-800/90 border-slate-700 text-sky-300 hover:bg-slate-700 transition"
+            title="Adicionar Marca na posição atual (Tecla M)"
+          >
+            <Flag className="w-3.5 h-3.5" />
+            <span className="hidden xl:inline">Marca</span>
+            <kbd className="text-[9px] px-1 rounded bg-slate-900 text-slate-400 font-mono">M</kbd>
+          </button>
+        )}
+
+        {onAddBeatNow && (
+          <button
+            type="button"
+            onClick={onAddBeatNow}
+            className="px-2.5 py-2 rounded-lg text-xs font-semibold flex items-center gap-1.5 border bg-slate-800/90 border-slate-700 text-emerald-300 hover:bg-slate-700 transition"
+            title="Registrar Batida na posição atual e estimar BPM (Tecla B)"
+          >
+            <Activity className="w-3.5 h-3.5" />
+            <span className="hidden xl:inline">Batida</span>
+            <kbd className="text-[9px] px-1 rounded bg-slate-900 text-slate-400 font-mono">B</kbd>
+          </button>
+        )}
       </div>
 
       {/* Time Readout + Live Chord Pill + Precount Countdown */}

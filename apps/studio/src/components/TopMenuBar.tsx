@@ -8,6 +8,7 @@ import {
   CheckCircle2,
   Loader2,
   ChevronDown,
+  Youtube,
 } from 'lucide-react';
 import type { ViewMode } from '../types/music';
 
@@ -29,6 +30,7 @@ interface TopMenuBarProps {
   canUndo: boolean;
   canRedo: boolean;
   onImportClick: () => void;
+  onOpenYouTubeModal: () => void;
   onOpenProjects: () => void;
   onNewProject: () => void;
   onSaveProject: () => void;
@@ -75,7 +77,8 @@ export const TopMenuBar: React.FC<TopMenuBarProps> = (props) => {
     Arquivo: [
       { label: 'Novo Projeto', shortcut: 'Ctrl+N', onClick: props.onNewProject },
       { label: 'Abrir / Gerenciar Projetos...', shortcut: 'Ctrl+O', onClick: props.onOpenProjects },
-      { label: 'Importar Arquivo(s) de Áudio...', shortcut: 'Ctrl+I', onClick: props.onImportClick, divider: true },
+      { label: 'Importar Arquivo(s) de Áudio...', shortcut: 'Ctrl+I', onClick: props.onImportClick },
+      { label: 'Abrir Vídeo do YouTube...', shortcut: 'Ctrl+Shift+Y', onClick: props.onOpenYouTubeModal, divider: true },
       { label: 'Salvar Projeto', shortcut: 'Ctrl+S', onClick: props.onSaveProject },
       { label: 'Salvar Como (Clonar Projeto)...', onClick: props.onSaveAs, divider: true },
       { label: 'Exportar (MP3 / WAV / FLAC / MIDI / TXT / PDF)...', shortcut: 'Ctrl+E', onClick: props.onExportOpen },
@@ -212,6 +215,16 @@ export const TopMenuBar: React.FC<TopMenuBarProps> = (props) => {
 
         {/* Right: Quick Action Buttons */}
         <div className="flex items-center gap-1.5 shrink-0">
+          <button
+            type="button"
+            onClick={props.onOpenYouTubeModal}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold shadow shadow-rose-950/40 transition"
+            title="Colar link do YouTube para estudar vídeo com velocidade e Loop A→B"
+          >
+            <Youtube className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Link YouTube</span>
+          </button>
+
           <button
             type="button"
             onClick={props.onImportClick}

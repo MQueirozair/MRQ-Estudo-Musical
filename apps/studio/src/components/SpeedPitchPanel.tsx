@@ -1,7 +1,8 @@
 import React from 'react';
-import { Gauge, Music2, RotateCcw, Minus, Plus } from 'lucide-react';
+import { FolderOpen, Gauge, Music2, RotateCcw, Minus, Plus } from 'lucide-react';
 
 const SPEED_PRESETS = [0.25, 0.35, 0.5, 0.6, 0.75, 0.85, 1.0, 1.25, 1.5, 2.0];
+const YOUTUBE_SPEED_PRESETS = [0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0];
 
 interface SpeedPitchPanelProps {
   speed: number;
@@ -9,6 +10,8 @@ interface SpeedPitchPanelProps {
   octaves: number;
   cents: number;
   processingAudio: boolean;
+  isYouTubeMode?: boolean;
+  onOpenLocalAudio?: () => void;
   onSpeedChange: (speed: number) => void;
   onSemitonesChange: (st: number) => void;
   onOctavesChange: (oct: number) => void;
@@ -22,6 +25,8 @@ export const SpeedPitchPanel: React.FC<SpeedPitchPanelProps> = ({
   octaves,
   cents,
   processingAudio,
+  isYouTubeMode = false,
+  onOpenLocalAudio,
   onSpeedChange,
   onSemitonesChange,
   onOctavesChange,
@@ -29,6 +34,7 @@ export const SpeedPitchPanel: React.FC<SpeedPitchPanelProps> = ({
   onResetPitch,
 }) => {
   const totalSemitones = semitones + octaves * 12;
+  const presets = isYouTubeMode ? YOUTUBE_SPEED_PRESETS : SPEED_PRESETS;
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
@@ -38,11 +44,11 @@ export const SpeedPitchPanel: React.FC<SpeedPitchPanelProps> = ({
           <div className="flex items-center gap-2">
             <Gauge className="w-4 h-4 text-sky-400" />
             <span className="text-xs font-bold uppercase tracking-wider text-slate-200">
-              Velocidade (Time Stretching Real)
+              {isYouTubeMode ? 'Velocidade do Vídeo (YouTube)' : 'Velocidade (Time Stretching Real)'}
             </span>
           </div>
           <div className="flex items-center gap-2">
-            {processingAudio && (
+            {processingAudio && !isYouTubeMode && (
               <span className="text-[10px] text-sky-300 animate-pulse font-mono">DSP C++...</span>
             )}
             <span className="font-mono text-sm font-extrabold text-sky-300 bg-sky-500/10 border border-sky-500/30 px-2 py-0.5 rounded-md">
@@ -52,8 +58,8 @@ export const SpeedPitchPanel: React.FC<SpeedPitchPanelProps> = ({
         </div>
 
         {/* Preset Buttons: 25% to 200% */}
-        <div className="grid grid-cols-5 sm:grid-cols-10 gap-1">
-          {SPEED_PRESETS.map((p) => {
+        <div className={`grid ${isYouTubeMode ? 'grid-cols-4 sm:grid-cols-8' : 'grid-cols-5 sm:grid-cols-10'} gap-1`}>
+          {presets.map((p) => {
             const active = Math.abs(speed - p) < 0.01;
             return (
               <button
@@ -79,7 +85,7 @@ export const SpeedPitchPanel: React.FC<SpeedPitchPanelProps> = ({
             type="range"
             min={0.25}
             max={2.0}
-            step={0.05}
+            step={isYouTubeMode ? 0.25 : 0.05}
             value={speed}
             onChange={(e) => onSpeedChange(parseFloat(e.target.value))}
             className="flex-1 cursor-pointer"
@@ -95,7 +101,9 @@ export const SpeedPitchPanel: React.FC<SpeedPitchPanelProps> = ({
           </button>
         </div>
         <p className="text-[10px] text-slate-500">
-          Phase Vocoder C++17 com travamento de fase: mantém a tonalidade original intacta em qualquer andamento.
+          {isYouTubeMode
+            ? 'Velocidade oficial do Player YouTube (25% a 200%) preservando a afinação original do vídeo.'
+            : 'Phase Vocoder C++17 com travamento de fase: mantém a tonalidade original intacta em qualquer andamento.'}
         </p>
       </div>
 
@@ -108,22 +116,48 @@ export const SpeedPitchPanel: React.FC<SpeedPitchPanelProps> = ({
               Afinação & Transposição
             </span>
           </div>
-          <div className="flex items-center gap-2">
-            <span className="font-mono text-xs font-bold text-indigo-300 bg-indigo-500/10 border border-indigo-500/30 px-2 py-0.5 rounded-md">
-              {totalSemitones >= 0 ? `+${totalSemitones}` : totalSemitones} st · {cents >= 0 ? `+${cents}` : cents}¢
-            </span>
-            <button
-              type="button"
-              onClick={onResetPitch}
-              className="px-2 py-0.5 rounded-md bg-slate-800 hover:bg-slate-700 text-[11px] text-slate-300 flex items-center gap-1"
-              title="Restaurar afinação original"
-            >
-              <RotateCcw className="w-3 h-3" />
-              <span>Restaurar</span>
-            </button>
-          </div>
+          {!isYouTubeMode && (
+            <div className="flex items-center gap-2">
+              <span className="font-mono text-xs font-bold text-indigo-300 bg-indigo-500/10 border border-indigo-500/30 px-2 py-0.5 rounded-md">
+                {totalSemitones >= 0 ? `+${totalSemitones}` : totalSemitones} st · {cents >= 0 ? `+${cents}` : cents}¢
+              </span>
+              <button
+                type="button"
+                onClick={onResetPitch}
+                className="px-2 py-0.5 rounded-md bg-slate-800 hover:bg-slate-700 text-[11px] text-slate-300 flex items-center gap-1"
+                title="Restaurar afinação original"
+              >
+                <RotateCcw className="w-3 h-3" />
+                <span>Restaurar</span>
+              </button>
+            </div>
+          )}
         </div>
 
+        {isYouTubeMode ? (
+          <div className="flex-1 rounded-xl bg-slate-950/70 border border-slate-800 p-3 flex flex-col justify-between gap-2.5">
+            <p className="text-xs text-slate-300 leading-relaxed">
+              O Player oficial incorporado do YouTube altera a velocidade mantendo o tom, mas não libera o fluxo de
+              áudio para transposição em semitons/cents (conformidade com os Termos do YouTube).
+            </p>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="text-[11px] text-slate-400">
+                Quer transpor em semitons (±12 st), ver Espectrograma FFT ou usar IA/Stems?
+              </span>
+              {onOpenLocalAudio && (
+                <button
+                  type="button"
+                  onClick={onOpenLocalAudio}
+                  className="px-3 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-500 text-white text-xs font-semibold flex items-center gap-1.5 shrink-0 transition"
+                >
+                  <FolderOpen className="w-3.5 h-3.5" />
+                  <span>Importar Áudio Local</span>
+                </button>
+              )}
+            </div>
+          </div>
+        ) : (
+          <>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
           {/* Semitones */}
           <div className="bg-slate-900/90 border border-slate-800 rounded-lg p-2 flex flex-col gap-1">
@@ -220,6 +254,8 @@ export const SpeedPitchPanel: React.FC<SpeedPitchPanelProps> = ({
         <p className="text-[10px] text-slate-500">
           Transposição independente da velocidade: ideal para ajustar gravações fora de A=440Hz ou adaptar ao tom vocal/instrumento.
         </p>
+          </>
+        )}
       </div>
     </div>
   );

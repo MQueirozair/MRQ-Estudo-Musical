@@ -48,6 +48,12 @@ export const api = {
   createProject: (name: string) =>
     apiJson<ProjectData>('/api/projects', { method: 'POST', body: JSON.stringify({ name }) }),
 
+  createYouTubeProject: (url: string, name?: string) =>
+    apiJson<ProjectData>('/api/projects/youtube', {
+      method: 'POST',
+      body: JSON.stringify({ url, ...(name ? { name } : {}) }),
+    }),
+
   getProject: (id: string) => apiJson<ProjectData>(`/api/projects/${id}`),
 
   updateProject: (id: string, patch: Partial<ProjectData>) =>

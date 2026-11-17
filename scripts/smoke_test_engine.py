@@ -115,6 +115,19 @@ def main() -> int:
                 assert resp.status == 206 and chunk[:4] == b"RIFF" and len(chunk) == 1024
                 print(f"[smoke] GET /audio Range 206 (75%, -2st) OK ({len(chunk)} bytes RIFF)")
 
+            # Check Official YouTube Study Project Creation
+            yt_payload = json.dumps({"url": "https://www.youtube.com/watch?v=aNOyvBm9Gfw", "name": "Smoke YouTube"}).encode("utf-8")
+            yt_req = urllib.request.Request(
+                f"{base}/api/projects/youtube",
+                data=yt_payload,
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            with urllib.request.urlopen(yt_req, timeout=10.0) as resp:
+                yt_proj = json.loads(resp.read().decode("utf-8"))
+                assert resp.status == 200 and yt_proj["source_type"] == "youtube" and yt_proj["youtube_video_id"] == "aNOyvBm9Gfw"
+                print(f"[smoke] POST /api/projects/youtube OK (id={yt_proj['id']}, video={yt_proj['youtube_video_id']})")
+
             print("[smoke] ALL FROZEN ENGINE SMOKE CHECKS PASSED!")
             return 0
         except Exception as exc:

@@ -103,3 +103,61 @@ def test_full_studio_api_workflow_and_exports(tmp_path: Path):
 
     exp_pdf = client.post(f"/api/projects/{pid}/export", json={"format": "pdf"})
     assert exp_pdf.status_code == 200 and exp_pdf.content[:5] == b"%PDF-"
+
+
+def test_youtube_study_project_api_formats_and_persistence(tmp_path: Path):
+    """Validates official YouTube IFrame Study Mode project creation (no media download) & study state persistence."""
+    app = create_app(data_dir=tmp_path / "yt_studio_data")
+    client = TestClient(app)
+
+    valid_urls = [
+        ("https://www.youtube.com/watch?v=aNOyvBm9Gfw&t=45s", "aNOyvBm9Gfw"),
+        ("https://youtu.be/dQw4w9WgXcQ?si=abc", "dQw4w9WgXcQ"),
+        ("https://www.youtube.com/shorts/M7lc1UVf-VE", "M7lc1UVf-VE"),
+        ("https://www.youtube.com/embed/aqz-KE-bpKQ", "aqz-KE-bpKQ"),
+        ("aNOyvBm9Gfw", "aNOyvBm9Gfw"),
+    ]
+    for url, expected_id in valid_urls:
+        res = client.post("/api/projects/youtube", json={"url": url, "name": f"Estudo {expected_id}"})
+        assert res.status_code == 200
+        data = res.json()
+        assert data["source_type"] == "youtube"
+        assert data["youtube_video_id"] == expected_id
+        assert data["youtube_url"] == f"https://www.youtube.com/watch?v={expected_id}"
+        assert data["audio_file_path"] is None
+
+    # Invalid URL rejected cleanly
+    bad = client.post("/api/projects/youtube", json={"url": "https://example.com/not-youtube"})
+    assert bad.status_code == 400
+
+    # Persist duration, speed, precount, manual beats, loops and markers on YouTube project
+    created = client.post(
+        "/api/projects/youtube",
+        json={"url": "https://www.youtube.com/watch?v=aNOyvBm9Gfw", "name": "Hino Harpa"},
+    ).json()
+    yt_id = created["id"]
+
+    patched = client.patch(
+        f"/api/projects/{yt_id}",
+        json={"duration_sec": 412.5, "speed": 0.75, "precount_sec": 2.0, "bpm": 88.0, "manual_beats": [10.0, 10.68, 11.36]},
+    )
+    assert patched.status_code == 200
+    assert patched.json()["duration_sec"] == 412.5
+    assert patched.json()["manual_beats"] == [10.0, 10.68, 11.36]
+
+    lp = client.post(
+        f"/api/projects/{yt_id}/loops",
+        json={"name": "Refrão Lento", "start_sec": 344.2, "end_sec": 351.8, "speed": 0.75, "semitones": 0, "cents": 0},
+    )
+    assert lp.status_code == 200
+
+    mk = client.post(
+        f"/api/projects/{yt_id}/markers",
+        json={"label": "Entrada Coral", "section_type": "Refrão", "time_sec": 344.2, "color": "#38BDF8", "note": ""},
+    )
+    assert mk.status_code == 200
+
+    loaded = client.get(f"/api/projects/{yt_id}").json()
+    assert len(loaded["loops"]) == 1
+    assert len(loaded["markers"]) == 1
+    assert loaded["manual_beats"] == [10.0, 10.68, 11.36]

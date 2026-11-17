@@ -10,8 +10,15 @@ class ProjectCreateRequest(BaseModel):
     name: str = Field(default="Novo Estudo", min_length=1, max_length=120)
 
 
+class YouTubeProjectCreateRequest(BaseModel):
+    url: str = Field(min_length=5, max_length=500)
+    name: Optional[str] = Field(default=None, max_length=140)
+
+
 class ProjectUpdateRequest(BaseModel):
     name: Optional[str] = None
+    duration_sec: Optional[float] = Field(default=None, ge=0.0)
+    manual_beats: Optional[List[float]] = None
     speed: Optional[float] = Field(default=None, ge=0.25, le=2.0)
     semitones: Optional[int] = Field(default=None, ge=-24, le=24)
     octaves: Optional[int] = Field(default=None, ge=-2, le=2)

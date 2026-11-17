@@ -4,6 +4,17 @@ Todas as mudanças relevantes no **MRQ Estudo Musical** serão documentadas nest
 
 O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e o projeto adota [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [1.0.1] - 2026-11-16
+
+### Adicionado
+- **Modo Estudo de Vídeos do YouTube (Player Oficial — YouTube IFrame Player API)**:
+  - Botão **Link YouTube** na barra superior, no menu *Arquivo → Abrir Vídeo do YouTube...* (`Ctrl+Shift+Y`) e na faixa rápida.
+  - Modal de entrada dupla (*Colar Link do YouTube* com pré-visualização instantânea ou *Carregar Arquivo de Áudio Local*).
+  - Player 16:9 incorporado via API oficial do YouTube (sem download nem extração de mídia, 100% compatível com os Termos de Serviço).
+  - Linha do tempo interativa com zoom (`-` / `ZOOM` / `+`), arraste para criar **Loop A → B** com alças ajustáveis, playhead ao vivo, **Marcas (`M`)** e **Batidas (`B`)** com estimativa automática de BPM.
+  - Velocidade preservando o tom de 25% a 200%, pré-contagem com metrônomo Web Audio antes de repetir loops e persistência completa em SQLite.
+  - Migração automática e segura de bancos `mrq_projects.db` existentes (`ALTER TABLE` idempotente) + cabeçalho `Referer` no Electron para evitar Erro 153 em embeds.
+
 ## [1.0.0] - 2026-11-16
 
 ### Adicionado

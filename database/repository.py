@@ -51,6 +51,18 @@ class ProjectRepository:
         sql = schema_file.read_text(encoding="utf-8")
         with self._connect() as conn:
             conn.executescript(sql)
+            # Safe idempotent migrations for existing SQLite databases
+            existing_cols = {r[1] for r in conn.execute("PRAGMA table_info(projects)").fetchall()}
+            migrations = [
+                ("source_type", "TEXT DEFAULT 'audio'"),
+                ("youtube_video_id", "TEXT"),
+                ("youtube_url", "TEXT"),
+                ("youtube_channel", "TEXT DEFAULT ''"),
+                ("manual_beats_json", "TEXT DEFAULT '[]'"),
+            ]
+            for col_name, col_def in migrations:
+                if col_name not in existing_cols:
+                    conn.execute(f"ALTER TABLE projects ADD COLUMN {col_name} {col_def}")
 
     # ---------------- PROJECTS ----------------
 
@@ -58,18 +70,25 @@ class ProjectRepository:
         pid = str(uuid.uuid4())[:12]
         now = _utc_now()
         meta = audio_meta or {}
+        source_type = str(meta.get("source_type") or "audio")
         with self._connect() as conn:
             conn.execute(
                 """
                 INSERT INTO projects (
-                    id, name, audio_file_path, original_filename, duration_sec,
+                    id, name, source_type, youtube_video_id, youtube_url, youtube_channel,
+                    manual_beats_json, audio_file_path, original_filename, duration_sec,
                     sample_rate, channels, format_name, codec_name, bit_rate,
                     file_size_bytes, created_at, updated_at, last_opened_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     pid,
                     name.strip() or "Novo Estudo",
+                    source_type,
+                    meta.get("youtube_video_id"),
+                    meta.get("youtube_url"),
+                    str(meta.get("youtube_channel") or ""),
+                    json.dumps(meta.get("manual_beats") or []),
                     meta.get("file_path"),
                     meta.get("filename"),
                     float(meta.get("duration_sec", 0.0)),
@@ -107,6 +126,8 @@ class ProjectRepository:
             if not row:
                 return None
             proj = dict(row)
+            proj["source_type"] = proj.get("source_type") or "audio"
+            proj["manual_beats"] = json.loads(proj.pop("manual_beats_json", "[]") or "[]")
             proj["loops"] = [
                 dict(r)
                 for r in conn.execute(
@@ -147,6 +168,11 @@ class ProjectRepository:
     def update_project(self, project_id: str, fields: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         allowed = {
             "name",
+            "source_type",
+            "youtube_video_id",
+            "youtube_url",
+            "youtube_channel",
+            "manual_beats_json",
             "audio_file_path",
             "original_filename",
             "duration_sec",
@@ -170,7 +196,12 @@ class ProjectRepository:
             "study_notes",
             "last_opened_at",
         }
-        clean = {k: v for k, v in fields.items() if k in allowed}
+        payload = dict(fields)
+        if "manual_beats" in payload and payload["manual_beats"] is not None:
+            payload["manual_beats_json"] = json.dumps(
+                sorted({round(float(x), 3) for x in payload.pop("manual_beats") if float(x) >= 0.0})
+            )
+        clean = {k: v for k, v in payload.items() if k in allowed}
         if not clean:
             return self.get_project(project_id)
         clean["updated_at"] = _utc_now()
@@ -202,6 +233,11 @@ class ProjectRepository:
         cloned = self.create_project(
             new_name,
             {
+                "source_type": orig.get("source_type", "audio"),
+                "youtube_video_id": orig.get("youtube_video_id"),
+                "youtube_url": orig.get("youtube_url"),
+                "youtube_channel": orig.get("youtube_channel", ""),
+                "manual_beats": orig.get("manual_beats", []),
                 "file_path": orig["audio_file_path"],
                 "filename": orig["original_filename"],
                 "duration_sec": orig["duration_sec"],

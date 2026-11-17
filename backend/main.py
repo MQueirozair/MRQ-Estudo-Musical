@@ -10,11 +10,13 @@ import json
 import logging
 import multiprocessing
 import os
+import re
 import shutil
 import sys
 import tempfile
 import threading
 import time
+import urllib.parse
 import urllib.request
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -41,6 +43,7 @@ from backend.schemas import (
     ProjectCreateRequest,
     ProjectUpdateRequest,
     TapTempoRequest,
+    YouTubeProjectCreateRequest,
 )
 from core.audio_engine.audio_manager import AudioManager
 from core.audio_engine.bridge import get_dsp_engine
@@ -212,6 +215,67 @@ def create_app(data_dir: Optional[str | Path] = None) -> FastAPI:
     @app.post("/api/projects")
     def create_project(req: ProjectCreateRequest) -> Dict[str, Any]:
         return repo.create_project(req.name)
+
+    @app.post("/api/projects/youtube")
+    def create_youtube_project(req: YouTubeProjectCreateRequest) -> Dict[str, Any]:
+        """Creates a study project backed by the official embedded YouTube IFrame Player (no unauthorized downloading)."""
+        raw = req.url.strip()
+        video_id: Optional[str] = None
+        if re.fullmatch(r"[A-Za-z0-9_-]{11}", raw):
+            video_id = raw
+        else:
+            patterns = [
+                r"(?:youtube\.com/watch\?.*v=)([A-Za-z0-9_-]{11})",
+                r"(?:youtu\.be/)([A-Za-z0-9_-]{11})",
+                r"(?:youtube\.com/embed/)([A-Za-z0-9_-]{11})",
+                r"(?:youtube\.com/shorts/)([A-Za-z0-9_-]{11})",
+                r"(?:youtube\.com/live/)([A-Za-z0-9_-]{11})",
+            ]
+            for pat in patterns:
+                m = re.search(pat, raw)
+                if m:
+                    video_id = m.group(1)
+                    break
+        if not video_id:
+            raise HTTPException(
+                status_code=400,
+                detail="Link do YouTube inválido. Cole uma URL como https://www.youtube.com/watch?v=... ou https://youtu.be/...",
+            )
+
+        canonical_url = f"https://www.youtube.com/watch?v={video_id}"
+        title = req.name.strip() if req.name and req.name.strip() else f"YouTube {video_id}"
+        channel = ""
+
+        # Optional public oEmbed metadata fetch (no media download)
+        try:
+            oembed_url = (
+                "https://www.youtube.com/oembed?url="
+                + urllib.parse.quote(canonical_url, safe="")
+                + "&format=json"
+            )
+            r = urllib.request.Request(oembed_url, headers={"User-Agent": "MRQ-Estudo-Musical/1.0"})
+            with urllib.request.urlopen(r, timeout=3.5) as resp:
+                meta_json = json.loads(resp.read().decode("utf-8"))
+                if not req.name and meta_json.get("title"):
+                    title = str(meta_json["title"])[:130]
+                if meta_json.get("author_name"):
+                    channel = str(meta_json["author_name"])[:80]
+        except Exception:
+            pass
+
+        return repo.create_project(
+            title,
+            {
+                "source_type": "youtube",
+                "youtube_video_id": video_id,
+                "youtube_url": canonical_url,
+                "youtube_channel": channel,
+                "filename": f"YouTube {video_id}",
+                "format_name": "YouTube",
+                "codec_name": "YouTube IFrame API",
+                "duration_sec": 0.0,
+            },
+        )
 
     @app.get("/api/projects/{project_id}")
     def get_project(project_id: str) -> Dict[str, Any]:

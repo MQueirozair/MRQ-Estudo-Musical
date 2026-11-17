@@ -71,3 +71,75 @@ def test_project_crud_clone_and_recovery(tmp_path: Path):
     assert repo.delete_project(pid) is True
     assert repo.get_project(pid) is None
     assert repo.get_project(cloned["id"]) is not None
+
+
+def test_sqlite_legacy_schema_migration_preserves_data(tmp_path: Path):
+    """Existing v1.0.0 SQLite databases without YouTube columns must upgrade cleanly in place."""
+    import sqlite3
+
+    db_path = tmp_path / "legacy_v1.db"
+    conn = sqlite3.connect(str(db_path))
+    conn.executescript(
+        """
+        CREATE TABLE projects (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            audio_file_path TEXT,
+            original_filename TEXT,
+            duration_sec REAL DEFAULT 0.0,
+            sample_rate INTEGER DEFAULT 44100,
+            channels INTEGER DEFAULT 2,
+            format_name TEXT DEFAULT '',
+            codec_name TEXT DEFAULT '',
+            bit_rate INTEGER DEFAULT 0,
+            file_size_bytes INTEGER DEFAULT 0,
+            speed REAL DEFAULT 1.0,
+            semitones INTEGER DEFAULT 0,
+            octaves INTEGER DEFAULT 0,
+            cents INTEGER DEFAULT 0,
+            precount_sec REAL DEFAULT 0.0,
+            bpm REAL,
+            bpm_confidence REAL,
+            musical_key TEXT,
+            scale_name TEXT,
+            key_confidence REAL,
+            time_signature TEXT DEFAULT '4/4',
+            study_notes TEXT DEFAULT '',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            last_opened_at TEXT NOT NULL
+        );
+        INSERT INTO projects (id, name, duration_sec, created_at, updated_at, last_opened_at)
+        VALUES ('old123', 'Projeto Antigo Windows', 120.0, '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z');
+        """
+    )
+    conn.commit()
+    conn.close()
+
+    repo = ProjectRepository(db_path)
+    legacy = repo.get_project("old123")
+    assert legacy is not None
+    assert legacy["name"] == "Projeto Antigo Windows"
+    assert legacy["source_type"] == "audio"
+    assert legacy["manual_beats"] == []
+
+    # Now create a YouTube project on the migrated DB
+    yt = repo.create_project(
+        "Solo YouTube",
+        {
+            "source_type": "youtube",
+            "youtube_video_id": "aNOyvBm9Gfw",
+            "youtube_url": "https://www.youtube.com/watch?v=aNOyvBm9Gfw",
+            "youtube_channel": "Canal Teste",
+            "format_name": "YouTube",
+        },
+    )
+    assert yt["source_type"] == "youtube"
+    assert yt["youtube_video_id"] == "aNOyvBm9Gfw"
+    updated = repo.update_project(yt["id"], {"manual_beats": [1.5, 0.5, 1.0], "duration_sec": 240.5})
+    assert updated["manual_beats"] == [0.5, 1.0, 1.5]
+    assert updated["duration_sec"] == 240.5
+    cloned = repo.clone_project(yt["id"], "Solo YouTube Cópia")
+    assert cloned["source_type"] == "youtube"
+    assert cloned["youtube_video_id"] == "aNOyvBm9Gfw"
+    assert cloned["manual_beats"] == [0.5, 1.0, 1.5]

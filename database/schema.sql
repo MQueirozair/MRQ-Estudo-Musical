@@ -6,6 +6,11 @@ PRAGMA foreign_keys = ON;
 CREATE TABLE IF NOT EXISTS projects (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
+    source_type TEXT DEFAULT 'audio',
+    youtube_video_id TEXT,
+    youtube_url TEXT,
+    youtube_channel TEXT DEFAULT '',
+    manual_beats_json TEXT DEFAULT '[]',
     audio_file_path TEXT,
     original_filename TEXT,
     duration_sec REAL DEFAULT 0.0,

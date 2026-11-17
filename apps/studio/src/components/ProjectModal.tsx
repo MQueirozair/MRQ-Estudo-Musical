@@ -180,7 +180,14 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
                         }}
                         className="text-left w-full"
                       >
-                        <div className="text-xs font-bold text-white truncate">{p.name}</div>
+                        <div className="text-xs font-bold text-white truncate flex items-center gap-1.5">
+                          {p.source_type === 'youtube' && (
+                            <span className="px-1.5 py-0.5 rounded bg-rose-500/20 border border-rose-500/40 text-rose-300 text-[9px] font-bold uppercase shrink-0">
+                              YouTube
+                            </span>
+                          )}
+                          <span className="truncate">{p.name}</span>
+                        </div>
                         <div className="text-[10px] text-slate-400 font-mono truncate">
                           {p.original_filename || 'Sem áudio'} · {formatTime(p.duration_sec, false)} ·{' '}
                           {p.bpm ? `${p.bpm} BPM` : 'BPM —'} · {p.musical_key || 'Tom —'}

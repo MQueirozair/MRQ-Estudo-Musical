@@ -9,6 +9,8 @@ import {
   AlertCircle,
   CheckCircle2,
   X,
+  Youtube,
+  FolderOpen,
 } from 'lucide-react';
 import { api } from './api/client';
 import { MRQPlaybackEngine } from './audio/playbackEngine';
@@ -28,6 +30,8 @@ import type {
 import { TopMenuBar } from './components/TopMenuBar';
 import { TransportBar } from './components/TransportBar';
 import { WaveformCanvas } from './components/WaveformCanvas';
+import { YouTubeStudyPlayer, type YouTubeStudyPlayerHandle } from './components/YouTubeStudyPlayer';
+import { YouTubeModal } from './components/YouTubeModal';
 import { SpeedPitchPanel } from './components/SpeedPitchPanel';
 import { LoopPanel } from './components/LoopPanel';
 import { PianoRoll } from './components/PianoRoll';
@@ -47,6 +51,7 @@ interface HistorySnapshot {
 export default function App() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const engineRef = useRef<MRQPlaybackEngine | null>(null);
+  const ytPlayerRef = useRef<YouTubeStudyPlayerHandle | null>(null);
   const tapTimesRef = useRef<number[]>([]);
 
   // Core Project State
@@ -104,6 +109,7 @@ export default function App() {
 
   // Modals
   const [projectsModalOpen, setProjectsModalOpen] = useState(false);
+  const [youtubeModalOpen, setYoutubeModalOpen] = useState(false);
   const [exportModalState, setExportModalState] = useState<{
     open: boolean;
     scope: 'full' | 'loop' | 'stem' | 'stems_mix';
@@ -172,9 +178,14 @@ export default function App() {
 
         setStemMixer((prev) => ({ ...prev, enabled: false }));
         engineRef.current?.stop();
+        ytPlayerRef.current?.stop();
+        setIsPlaying(false);
         engineRef.current?.setOriginalDuration(p.duration_sec || 0);
 
-        if (p.audio_file_path) {
+        if (p.source_type === 'youtube') {
+          setWaveform(null);
+          setBottomTab((prev) => (prev === 'pianoroll' || prev === 'chords' || prev === 'stems' ? 'loops' : prev));
+        } else if (p.audio_file_path) {
           const wf = await api.getWaveform(p.id, 2400);
           setWaveform(wf);
         } else {
@@ -337,7 +348,12 @@ export default function App() {
   const runAnalysis = useCallback(
     async (kind: 'full' | 'bpm' | 'key' | 'notes' | 'chords') => {
       if (!project?.id || !project.audio_file_path) {
-        showToast('error', 'Importe um arquivo de áudio primeiro.');
+        showToast(
+          'info',
+          project?.source_type === 'youtube'
+            ? 'Análise por IA requer arquivo de áudio local (o Player oficial do YouTube não baixa mídia).'
+            : 'Importe um arquivo de áudio primeiro.'
+        );
         return;
       }
       const labels = {
@@ -372,7 +388,12 @@ export default function App() {
   // 4-Stem Separation Runner with real progress polling
   const handleSeparateStems = useCallback(async () => {
     if (!project?.id || !project.audio_file_path) {
-      showToast('error', 'Importe um áudio antes de separar stems.');
+      showToast(
+        'info',
+        project?.source_type === 'youtube'
+          ? 'Separação em 4 Stems requer arquivo de áudio local (o Player oficial do YouTube não baixa mídia).'
+          : 'Importe um áudio antes de separar stems.'
+      );
       return;
     }
     setBottomTab('stems');
@@ -491,6 +512,98 @@ export default function App() {
     [project, showToast]
   );
 
+  const isYouTubeMode = project?.source_type === 'youtube' && Boolean(project?.youtube_video_id);
+
+  const playbackToggle = useCallback(() => {
+    if (isYouTubeMode) ytPlayerRef.current?.togglePlay();
+    else engineRef.current?.togglePlay();
+  }, [isYouTubeMode]);
+
+  const playbackPlay = useCallback(() => {
+    if (isYouTubeMode) ytPlayerRef.current?.play();
+    else engineRef.current?.play();
+  }, [isYouTubeMode]);
+
+  const playbackStop = useCallback(() => {
+    if (isYouTubeMode) ytPlayerRef.current?.stop();
+    else engineRef.current?.stop();
+  }, [isYouTubeMode]);
+
+  const playbackSeek = useCallback(
+    (sec: number) => {
+      if (isYouTubeMode) ytPlayerRef.current?.seek(sec);
+      else engineRef.current?.seek(sec);
+    },
+    [isYouTubeMode]
+  );
+
+  // Open YouTube Video as a Study Project (official YouTube IFrame Player API)
+  const handleOpenYouTube = useCallback(
+    async (url: string, customName?: string) => {
+      setIsBusy(true);
+      setBusyText('Abrindo vídeo do YouTube...');
+      try {
+        engineRef.current?.stop();
+        const created = await api.createYouTubeProject(url, customName);
+        await loadProject(created.id);
+        setBottomTab('loops');
+        showToast('success', `Vídeo do YouTube carregado: "${created.name}".`);
+      } finally {
+        setIsBusy(false);
+        setBusyText('');
+      }
+    },
+    [loadProject, showToast]
+  );
+
+  // Save real duration reported by YouTube IFrame Player once video loads
+  const handleYouTubeDurationReady = useCallback(
+    (durSec: number) => {
+      if (!project || project.source_type !== 'youtube' || durSec <= 0) return;
+      if (Math.abs((project.duration_sec || 0) - durSec) < 0.8) return;
+      setProject((prev) => (prev ? { ...prev, duration_sec: durSec } : prev));
+      void api.updateProject(project.id, { duration_sec: Number(durSec.toFixed(2)) }).catch(() => {});
+    },
+    [project]
+  );
+
+  // Record Manual Beat (key B) and estimate BPM from recent beats
+  const handleAddBeatAt = useCallback(
+    async (sec: number) => {
+      if (!project) return;
+      const t = Number(Math.max(0, sec).toFixed(3));
+      const prevBeats = project.manual_beats || [];
+      if (prevBeats.some((b) => Math.abs(b - t) < 0.08)) return;
+      const nextBeats = [...prevBeats, t].sort((a, b) => a - b);
+      let estimatedBpm: number | undefined;
+      const recent = nextBeats.filter((b) => Math.abs(b - t) <= 8.0);
+      if (recent.length >= 2) {
+        const diffs: number[] = [];
+        for (let i = 1; i < recent.length; i++) {
+          const d = recent[i] - recent[i - 1];
+          if (d >= 0.25 && d <= 1.6) diffs.push(d);
+        }
+        if (diffs.length > 0) {
+          const avg = diffs.reduce((a, b) => a + b, 0) / diffs.length;
+          estimatedBpm = Math.round((60 / avg) * 10) / 10;
+        }
+      }
+      const patch: Partial<ProjectData> = {
+        manual_beats: nextBeats,
+        ...(estimatedBpm ? { bpm: estimatedBpm } : {}),
+      };
+      setProject((p) => (p ? { ...p, ...patch } : p));
+      await api.updateProject(project.id, patch);
+      showToast(
+        'info',
+        estimatedBpm
+          ? `Batida marcada (${nextBeats.length} total · ~${estimatedBpm} BPM).`
+          : `Batida marcada em ${t.toFixed(2)}s (${nextBeats.length} total).`
+      );
+    },
+    [project, showToast]
+  );
+
   const handleLoopFromMarker = useCallback(
     (mk: MarkerItem) => {
       if (!project) return;
@@ -502,11 +615,11 @@ export default function App() {
         setLoopA(mk.time_sec);
         setLoopB(endSec);
         setLoopEnabled(true);
-        engineRef.current?.seek(mk.time_sec);
+        playbackSeek(mk.time_sec);
         showToast('info', `Loop A/B definido para seção "${mk.label}".`);
       }
     },
-    [project, showToast]
+    [project, playbackSeek, showToast]
   );
 
   // Global Keyboard Shortcuts
@@ -517,28 +630,33 @@ export default function App() {
 
       if (e.code === 'Space') {
         e.preventDefault();
-        engineRef.current?.togglePlay();
+        playbackToggle();
       } else if (e.key === 'ArrowLeft') {
         e.preventDefault();
-        engineRef.current?.seek(Math.max(0, currentTime - 5));
+        playbackSeek(Math.max(0, currentTime - 5));
       } else if (e.key === 'ArrowRight') {
         e.preventDefault();
-        engineRef.current?.seek(Math.min(project?.duration_sec || 0, currentTime + 5));
+        playbackSeek(Math.min(project?.duration_sec || 36000, currentTime + 5));
       } else if (e.key.toLowerCase() === 'l') {
         setLoopEnabled((v) => !v);
       } else if (e.key.toLowerCase() === 'a' && !e.ctrlKey && !e.metaKey) {
         setLoopA(currentTime);
         if (loopB <= currentTime) setLoopB(Math.min(project?.duration_sec || currentTime + 4, currentTime + 4));
         setLoopEnabled(true);
-      } else if (e.key.toLowerCase() === 'b' && !e.ctrlKey && !e.metaKey) {
+      } else if (e.key === ']' || (e.shiftKey && e.key.toLowerCase() === 'b' && !e.ctrlKey && !e.metaKey)) {
         if (currentTime > loopA + 0.1) {
           setLoopB(currentTime);
           setLoopEnabled(true);
         }
+      } else if (e.key.toLowerCase() === 'b' && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
+        void handleAddBeatAt(currentTime);
       } else if (e.key.toLowerCase() === 'm') {
         void handleAddMarkerAt(currentTime);
       } else if (e.key.toLowerCase() === 't') {
         void handleTapTempo();
+      } else if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'y') {
+        e.preventDefault();
+        setYoutubeModalOpen(true);
       } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
         e.preventDefault();
         void saveProjectParams({ speed, semitones, octaves, cents, precount_sec: precountSec });
@@ -572,6 +690,9 @@ export default function App() {
     octaves,
     cents,
     precountSec,
+    playbackToggle,
+    playbackSeek,
+    handleAddBeatAt,
     handleAddMarkerAt,
     handleTapTempo,
     saveProjectParams,
@@ -646,6 +767,7 @@ export default function App() {
         canUndo={undoStack.length > 0}
         canRedo={redoStack.length > 0}
         onImportClick={() => fileInputRef.current?.click()}
+        onOpenYouTubeModal={() => setYoutubeModalOpen(true)}
         onOpenProjects={() => setProjectsModalOpen(true)}
         onNewProject={async () => {
           const created = await api.createProject(`Novo Estudo ${new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`);
@@ -745,8 +867,8 @@ export default function App() {
 
       {/* MAIN WORKSPACE */}
       <main className="flex-1 max-w-[1600px] w-full mx-auto px-3 py-3 flex flex-col gap-3">
-        {/* Quick Musical Status Ribbon */}
-        {project && (
+        {/* Quick Musical Status Ribbon (Local Audio Mode) */}
+        {project && !isYouTubeMode && (
           <div className="flex flex-wrap items-center justify-between gap-2 text-xs px-1">
             <div className="flex flex-wrap items-center gap-2">
               <span className="px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-800 text-slate-300 font-mono">
@@ -763,44 +885,92 @@ export default function App() {
                 {project.chords.length} acordes
               </span>
             </div>
-            <div className="text-[11px] text-slate-500 hidden md:block">
-              100% Local · Motor DSP C++17 · Arraste arquivos de áudio para abrir
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setYoutubeModalOpen(true)}
+                className="px-2.5 py-1 rounded-lg bg-rose-600/15 hover:bg-rose-600/25 border border-rose-500/40 text-rose-200 text-[11px] font-semibold flex items-center gap-1.5 transition"
+              >
+                <Youtube className="w-3.5 h-3.5 text-rose-400" />
+                <span>Estudar Vídeo do YouTube</span>
+              </button>
+              <div className="text-[11px] text-slate-500 hidden xl:block">
+                100% Local · Motor DSP C++17 · Arraste arquivos de áudio
+              </div>
             </div>
           </div>
         )}
 
-        {/* 2. CENTRAL WAVEFORM + SPECTROGRAM CANVAS */}
-        <WaveformCanvas
-          waveform={waveform}
-          spectrogram={spectrogram}
-          duration={project?.duration_sec || 0}
-          currentTime={currentTime}
-          viewMode={viewMode}
-          showBeats={showBeats}
-          beats={project?.analysis?.bpm?.beats || []}
-          downbeats={project?.analysis?.bpm?.downbeats || []}
-          markers={project?.markers || []}
-          chords={project?.chords || []}
-          loopEnabled={loopEnabled}
-          loopA={loopA}
-          loopB={loopB}
-          zoomH={zoomH}
-          zoomV={zoomV}
-          specLogScale={specLogScale}
-          onViewModeChange={setViewMode}
-          onToggleBeats={() => setShowBeats((v) => !v)}
-          onToggleSpecScale={() => setSpecLogScale((v) => !v)}
-          onZoomHChange={setZoomH}
-          onZoomVChange={setZoomV}
-          onSeek={(sec) => engineRef.current?.seek(sec)}
-          onLoopChange={(a, b, en) => {
-            setLoopA(a);
-            setLoopB(b);
-            if (en !== undefined) setLoopEnabled(en);
-          }}
-          onAddMarkerAt={(sec) => void handleAddMarkerAt(sec)}
-          onSelectMarkerLoop={handleLoopFromMarker}
-        />
+        {/* 2. CENTRAL STAGE: OFFICIAL YOUTUBE STUDY PLAYER OR WAVEFORM/SPECTROGRAM */}
+        {isYouTubeMode && project?.youtube_video_id ? (
+          <YouTubeStudyPlayer
+            ref={ytPlayerRef}
+            videoId={project.youtube_video_id}
+            videoUrl={project.youtube_url}
+            title={project.name}
+            channel={project.youtube_channel}
+            duration={project.duration_sec || 0}
+            bpm={project.bpm}
+            musicalKey={project.musical_key}
+            currentTime={currentTime}
+            isPlaying={isPlaying}
+            speed={speed}
+            volume={volume}
+            muted={muted}
+            loopEnabled={loopEnabled}
+            loopA={loopA}
+            loopB={loopB}
+            precountSec={precountSec}
+            markers={project.markers || []}
+            manualBeats={project.manual_beats || []}
+            onTimeUpdate={setCurrentTime}
+            onDurationReady={handleYouTubeDurationReady}
+            onPlayStateChange={setIsPlaying}
+            onPrecountTick={setPrecountRemaining}
+            onLoopChange={(a, b, en) => {
+              setLoopA(a);
+              setLoopB(b);
+              if (en !== undefined) setLoopEnabled(en);
+            }}
+            onSeekMarkerLoop={handleLoopFromMarker}
+            onOpenYouTubeModal={() => setYoutubeModalOpen(true)}
+            onOpenLocalAudio={() => fileInputRef.current?.click()}
+          />
+        ) : (
+          <WaveformCanvas
+            waveform={waveform}
+            spectrogram={spectrogram}
+            duration={project?.duration_sec || 0}
+            currentTime={currentTime}
+            viewMode={viewMode}
+            showBeats={showBeats}
+            beats={
+              (project?.analysis?.bpm?.beats?.length ? project.analysis.bpm.beats : project?.manual_beats) || []
+            }
+            downbeats={project?.analysis?.bpm?.downbeats || []}
+            markers={project?.markers || []}
+            chords={project?.chords || []}
+            loopEnabled={loopEnabled}
+            loopA={loopA}
+            loopB={loopB}
+            zoomH={zoomH}
+            zoomV={zoomV}
+            specLogScale={specLogScale}
+            onViewModeChange={setViewMode}
+            onToggleBeats={() => setShowBeats((v) => !v)}
+            onToggleSpecScale={() => setSpecLogScale((v) => !v)}
+            onZoomHChange={setZoomH}
+            onZoomVChange={setZoomV}
+            onSeek={playbackSeek}
+            onLoopChange={(a, b, en) => {
+              setLoopA(a);
+              setLoopB(b);
+              if (en !== undefined) setLoopEnabled(en);
+            }}
+            onAddMarkerAt={(sec) => void handleAddMarkerAt(sec)}
+            onSelectMarkerLoop={handleLoopFromMarker}
+          />
+        )}
 
         {/* 3. TRANSPORT BAR */}
         <TransportBar
@@ -816,9 +986,9 @@ export default function App() {
           precountRemaining={precountRemaining}
           tapBpm={tapBpm}
           currentChordSymbol={currentChord?.symbol || null}
-          onTogglePlay={() => engineRef.current?.togglePlay()}
-          onStop={() => engineRef.current?.stop()}
-          onSeek={(sec) => engineRef.current?.seek(sec)}
+          onTogglePlay={playbackToggle}
+          onStop={playbackStop}
+          onSeek={playbackSeek}
           onVolumeChange={(v) => {
             setVolume(v);
             if (muted && v > 0) setMuted(false);
@@ -842,6 +1012,8 @@ export default function App() {
               showToast('success', `BPM atualizado para ${tapBpm}.`);
             }
           }}
+          onAddMarkerNow={() => void handleAddMarkerAt(currentTime)}
+          onAddBeatNow={() => void handleAddBeatAt(currentTime)}
         />
 
         {/* 4. SPEED (TIME STRETCHING) & PITCH (TRANSPOSITION) PANELS */}
@@ -851,6 +1023,8 @@ export default function App() {
           octaves={octaves}
           cents={cents}
           processingAudio={processingAudio}
+          isYouTubeMode={isYouTubeMode}
+          onOpenLocalAudio={() => fileInputRef.current?.click()}
           onSpeedChange={(spd) => {
             setSpeed(spd);
             void saveProjectParams({ speed: spd });
@@ -905,7 +1079,39 @@ export default function App() {
           </div>
 
           <div className="p-3.5">
-            {bottomTab === 'pianoroll' && project && (
+            {isYouTubeMode && (bottomTab === 'pianoroll' || bottomTab === 'chords' || bottomTab === 'stems') && (
+              <div className="rounded-xl bg-slate-950/80 border border-slate-800 p-6 flex flex-col items-center text-center gap-3">
+                <FolderOpen className="w-8 h-8 text-sky-400" />
+                <h3 className="text-sm font-bold text-white">
+                  Análise por IA, Piano Roll, Acordes e Stems disponíveis para Áudio Local
+                </h3>
+                <p className="text-xs text-slate-400 max-w-xl leading-relaxed">
+                  No modo YouTube utilizamos o <strong>Player Oficial incorporado</strong> (sem download não
+                  autorizado de áudio). Você já pode usar <strong>Loops A/B salvos</strong>,{' '}
+                  <strong>Marcadores (M)</strong>, <strong>Batidas (B)</strong>, velocidade 25%–200% e anotações de
+                  estudo. Para desbloquear transcrição polifônica (MIDI), reconhecimento de acordes e separação em 4
+                  stems, importe um arquivo de áudio local (MP3, WAV, FLAC, M4A, OGG).
+                </p>
+                <div className="flex flex-wrap items-center justify-center gap-2 mt-1">
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="px-4 py-2 rounded-lg bg-sky-600 hover:bg-sky-500 text-white text-xs font-bold flex items-center gap-1.5 transition"
+                  >
+                    <Upload className="w-3.5 h-3.5" /> Importar Arquivo de Áudio Local
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setBottomTab('loops')}
+                    className="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1.5 transition"
+                  >
+                    <Repeat className="w-3.5 h-3.5 text-amber-400" /> Ver Loops Salvos ({project?.loops.length || 0})
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {!isYouTubeMode && bottomTab === 'pianoroll' && project && (
               <PianoRoll
                 notes={project.notes}
                 duration={project.duration_sec}
@@ -916,11 +1122,11 @@ export default function App() {
                 onNotesChange={handleNotesChange}
                 onExportMidi={() => void handleExportRun({ format: 'mid' }, `${project.name}.mid`)}
                 onAnalyzeNotes={() => void runAnalysis('notes')}
-                onSeek={(sec) => engineRef.current?.seek(sec)}
+                onSeek={playbackSeek}
               />
             )}
 
-            {bottomTab === 'chords' && project && (
+            {!isYouTubeMode && bottomTab === 'chords' && project && (
               <ChordPanel
                 chords={project.chords}
                 currentTime={currentTime}
@@ -928,12 +1134,12 @@ export default function App() {
                 analysisMeta={project.analysis?.chords}
                 onChordsChange={handleChordsChange}
                 onAnalyzeChords={() => void runAnalysis('chords')}
-                onSeek={(sec) => engineRef.current?.seek(sec)}
+                onSeek={playbackSeek}
                 onExportChordsTxt={() => void handleExportRun({ format: 'txt_chords' }, `${project.name}_cifras.txt`)}
               />
             )}
 
-            {bottomTab === 'stems' && project && (
+            {!isYouTubeMode && bottomTab === 'stems' && project && (
               <StemMixerPanel
                 stemsAnalysis={project.analysis?.stems}
                 mixer={stemMixer}
@@ -978,14 +1184,20 @@ export default function App() {
                   setLoopB(lp.end_sec);
                   setLoopEnabled(true);
                   setSpeed(lp.speed || 1.0);
-                  setSemitones(lp.semitones || 0);
-                  setOctaves(0);
-                  setCents(lp.cents || 0);
-                  engineRef.current?.setLoop(true, lp.start_sec, lp.end_sec);
-                  engineRef.current?.seek(lp.start_sec);
-                  if (autoPlay) engineRef.current?.play();
+                  if (!isYouTubeMode) {
+                    setSemitones(lp.semitones || 0);
+                    setOctaves(0);
+                    setCents(lp.cents || 0);
+                    engineRef.current?.setLoop(true, lp.start_sec, lp.end_sec);
+                  }
+                  playbackSeek(lp.start_sec);
+                  if (autoPlay) playbackPlay();
                 }}
                 onExportLoop={(a, b) => {
+                  if (isYouTubeMode) {
+                    showToast('info', 'Exportação de áudio requer um arquivo de áudio local.');
+                    return;
+                  }
                   setLoopA(a);
                   setLoopB(b);
                   setExportModalState({ open: true, scope: 'loop' });
@@ -1007,14 +1219,76 @@ export default function App() {
                   await api.deleteMarker(project.id, id);
                   setProject(await api.getProject(project.id));
                 }}
-                onSeek={(sec) => engineRef.current?.seek(sec)}
+                onSeek={playbackSeek}
                 onLoopSection={handleLoopFromMarker}
-                onAnalyzeBpm={() => void runAnalysis('bpm')}
-                onAnalyzeKey={() => void runAnalysis('key')}
+                onAnalyzeBpm={() => {
+                  if (isYouTubeMode) {
+                    showToast('info', 'Use a tecla B ou o botão Tap para medir o BPM em vídeos do YouTube.');
+                    return;
+                  }
+                  void runAnalysis('bpm');
+                }}
+                onAnalyzeKey={() => {
+                  if (isYouTubeMode) {
+                    showToast('info', 'Detecção automática de tonalidade requer arquivo de áudio local.');
+                    return;
+                  }
+                  void runAnalysis('key');
+                }}
               />
             )}
           </div>
         </section>
+
+        {/* Bottom Keyboard Shortcut Helper Ribbon (TuneTranscriber v3 style) */}
+        <footer className="hidden sm:flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-[11px] text-slate-500 py-1">
+          <span>
+            <kbd className="px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-300 font-mono text-[10px]">
+              space
+            </kbd>{' '}
+            reproduzir
+          </span>
+          <span>
+            <kbd className="px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-300 font-mono text-[10px]">
+              m
+            </kbd>{' '}
+            marca
+          </span>
+          <span>
+            <kbd className="px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-300 font-mono text-[10px]">
+              b
+            </kbd>{' '}
+            batida
+          </span>
+          <span>
+            <kbd className="px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-300 font-mono text-[10px]">
+              l
+            </kbd>{' '}
+            loop A/B
+          </span>
+          <span>
+            <kbd className="px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-300 font-mono text-[10px]">
+              ← →
+            </kbd>{' '}
+            ±5s
+          </span>
+          <span>
+            <kbd className="px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-300 font-mono text-[10px]">
+              a
+            </kbd>{' '}
+            /{' '}
+            <kbd className="px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-300 font-mono text-[10px]">
+              ]
+            </kbd>{' '}
+            pontos A/B
+          </span>
+          <span>
+            <kbd className="px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-300 font-mono text-[10px]">
+              Ctrl+Shift+Y
+            </kbd>{' '}
+            YouTube
+          </span>
+        </footer>
       </main>
 
       {/* Mobile / Android Bottom Adaptive Navigation Bar */}
@@ -1102,6 +1376,13 @@ export default function App() {
       )}
 
       <ModelManagerModal open={modelsModalOpen} onClose={() => setModelsModalOpen(false)} />
+
+      <YouTubeModal
+        open={youtubeModalOpen}
+        onClose={() => setYoutubeModalOpen(false)}
+        onSubmitYouTube={handleOpenYouTube}
+        onChooseLocalAudio={() => fileInputRef.current?.click()}
+      />
 
       <HelpModals tab={helpTab} onClose={() => setHelpTab(null)} onChangeTab={(t) => setHelpTab(t)} />
     </div>
