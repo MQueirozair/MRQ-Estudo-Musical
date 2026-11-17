@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Download, FileAudio, FileText, FileMusic, FileCheck2, X, Loader2 } from 'lucide-react';
+import { Download, FileAudio, FileText, FileMusic, FileCheck2, X, Loader2, Lock, Upload } from 'lucide-react';
 import type { ProjectData, StemKey, StemMixerState } from '../types/music';
 import { formatTime } from '../data/chordDiagrams';
 
@@ -16,6 +16,7 @@ interface ExportModalProps {
   defaultScope?: 'full' | 'loop' | 'stem' | 'stems_mix';
   defaultStemKey?: StemKey;
   onClose: () => void;
+  onAttachLocalAudio?: () => void;
   onRunExport: (payload: Record<string, any>, fallbackName: string) => Promise<void>;
 }
 
@@ -32,9 +33,13 @@ export const ExportModal: React.FC<ExportModalProps> = ({
   defaultScope = 'full',
   defaultStemKey = 'vocals',
   onClose,
+  onAttachLocalAudio,
   onRunExport,
 }) => {
-  const [format, setFormat] = useState<'mp3' | 'wav' | 'flac' | 'mid' | 'txt_notes' | 'txt_chords' | 'pdf'>('mp3');
+  const hasAudio = Boolean(project.audio_file_path);
+  const [format, setFormat] = useState<'mp3' | 'wav' | 'flac' | 'mid' | 'txt_notes' | 'txt_chords' | 'pdf'>(
+    hasAudio ? 'mp3' : 'pdf'
+  );
   const [scope, setScope] = useState<'full' | 'loop' | 'selection' | 'stem' | 'stems_mix'>(defaultScope);
   const [stemKey, setStemKey] = useState<StemKey>(defaultStemKey);
   const [applyDsp, setApplyDsp] = useState(true);
@@ -44,12 +49,18 @@ export const ExportModal: React.FC<ExportModalProps> = ({
 
   React.useEffect(() => {
     if (open) {
+      setFormat((prev) => {
+        const prevIsAudio = prev === 'mp3' || prev === 'wav' || prev === 'flac';
+        if (!hasAudio && prevIsAudio) return 'pdf';
+        if (hasAudio && defaultScope !== 'full' && !prevIsAudio) return 'mp3';
+        return prev;
+      });
       setScope(defaultScope);
       setStemKey(defaultStemKey);
       setCustomA(loopA);
       setCustomB(loopB > loopA ? loopB : project.duration_sec);
     }
-  }, [open, defaultScope, defaultStemKey, loopA, loopB, project.duration_sec]);
+  }, [open, hasAudio, defaultScope, defaultStemKey, loopA, loopB, project.duration_sec]);
 
   if (!open) return null;
 
@@ -58,6 +69,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
   const hasStems = Boolean(project.analysis?.stems?.stems?.vocals);
 
   const handleSubmit = async () => {
+    if (isAudioFmt && !hasAudio) return;
     setBusy(true);
     try {
       const payload: Record<string, any> = {
@@ -88,14 +100,20 @@ export const ExportModal: React.FC<ExportModalProps> = ({
     }
   };
 
-  const formatOptions: Array<{ id: typeof format; label: string; desc: string; Icon: React.FC<any> }> = [
-    { id: 'mp3', label: 'MP3 (192 kbps)', desc: 'Compacto para celular e estudo portátil', Icon: FileAudio },
-    { id: 'wav', label: 'WAV (PCM 16-bit)', desc: 'Sem perdas, máxima qualidade', Icon: FileAudio },
-    { id: 'flac', label: 'FLAC (Lossless)', desc: 'Compressão sem perdas', Icon: FileAudio },
-    { id: 'mid', label: 'MIDI (.mid)', desc: 'Transcrição editada do Piano Roll (SMF)', Icon: FileMusic },
-    { id: 'txt_notes', label: 'Notas (TXT)', desc: 'Tabela completa de notas, tempos e confiança', Icon: FileText },
-    { id: 'txt_chords', label: 'Cifras (TXT)', desc: 'Progressão harmônica com marcadores', Icon: FileText },
-    { id: 'pdf', label: 'Relatório PDF', desc: 'Análise musical completa formatada', Icon: FileCheck2 },
+  const formatOptions: Array<{
+    id: typeof format;
+    label: string;
+    desc: string;
+    requiresAudio: boolean;
+    Icon: React.FC<any>;
+  }> = [
+    { id: 'mp3', label: 'MP3 (192 kbps)', desc: 'Compacto para celular e estudo portátil', requiresAudio: true, Icon: FileAudio },
+    { id: 'wav', label: 'WAV (PCM 16-bit)', desc: 'Sem perdas, máxima qualidade', requiresAudio: true, Icon: FileAudio },
+    { id: 'flac', label: 'FLAC (Lossless)', desc: 'Compressão sem perdas', requiresAudio: true, Icon: FileAudio },
+    { id: 'mid', label: 'MIDI (.mid)', desc: 'Transcrição editada do Piano Roll (SMF)', requiresAudio: false, Icon: FileMusic },
+    { id: 'txt_notes', label: 'Notas (TXT)', desc: 'Tabela completa de notas, tempos e confiança', requiresAudio: false, Icon: FileText },
+    { id: 'txt_chords', label: 'Cifras (TXT)', desc: 'Progressão harmônica, marcadores e loops', requiresAudio: false, Icon: FileText },
+    { id: 'pdf', label: 'Relatório PDF', desc: 'Resumo completo: vídeo, loops, marcas, cifras e notas', requiresAudio: false, Icon: FileCheck2 },
   ];
 
   return (
@@ -112,30 +130,68 @@ export const ExportModal: React.FC<ExportModalProps> = ({
         </div>
 
         <div className="p-4 space-y-4 max-h-[78vh] overflow-y-auto">
+          {!hasAudio && (
+            <div className="rounded-xl bg-sky-950/50 border border-sky-500/35 p-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5">
+              <div className="text-[11px] text-slate-300 leading-relaxed">
+                <strong className="text-sky-300">Modo Vídeo YouTube:</strong> você já pode exportar{' '}
+                <strong>Relatório PDF</strong>, <strong>Cifras (TXT)</strong>, <strong>Notas (TXT)</strong> e{' '}
+                <strong>MIDI (.mid)</strong> agora mesmo. Para exportar <strong>MP3 / WAV / FLAC</strong> (o YouTube não
+                permite baixar áudio direto), vincule um áudio/vídeo local ao projeto.
+              </div>
+              {onAttachLocalAudio && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    onAttachLocalAudio();
+                  }}
+                  className="px-3 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-500 text-white text-[11px] font-bold flex items-center gap-1.5 shrink-0 transition"
+                >
+                  <Upload className="w-3.5 h-3.5" />
+                  <span>Vincular Áudio</span>
+                </button>
+              )}
+            </div>
+          )}
+
           {/* Format Grid */}
           <div>
             <label className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block mb-2">
               1. Escolha o Formato de Saída
             </label>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-              {formatOptions.map(({ id, label, desc, Icon }) => (
-                <button
-                  key={id}
-                  type="button"
-                  onClick={() => setFormat(id)}
-                  className={`p-2.5 rounded-xl border text-left transition ${
-                    format === id
-                      ? 'bg-emerald-500/15 border-emerald-400 text-white'
-                      : 'bg-slate-950/70 border-slate-800 text-slate-300 hover:border-slate-600'
-                  }`}
-                >
-                  <div className="flex items-center gap-1.5 text-xs font-bold">
-                    <Icon className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>{label}</span>
-                  </div>
-                  <div className="text-[10px] text-slate-400 mt-0.5 leading-snug">{desc}</div>
-                </button>
-              ))}
+              {formatOptions.map(({ id, label, desc, requiresAudio, Icon }) => {
+                const locked = requiresAudio && !hasAudio;
+                return (
+                  <button
+                    key={id}
+                    type="button"
+                    disabled={locked}
+                    onClick={() => setFormat(id)}
+                    className={`p-2.5 rounded-xl border text-left transition ${
+                      locked
+                        ? 'bg-slate-950/40 border-slate-800/70 text-slate-500 opacity-55 cursor-not-allowed'
+                        : format === id
+                        ? 'bg-emerald-500/15 border-emerald-400 text-white'
+                        : 'bg-slate-950/70 border-slate-800 text-slate-300 hover:border-slate-600'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-1 text-xs font-bold">
+                      <span className="flex items-center gap-1.5 min-w-0">
+                        {locked ? (
+                          <Lock className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                        ) : (
+                          <Icon className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                        )}
+                        <span className="truncate">{label}</span>
+                      </span>
+                    </div>
+                    <div className="text-[10px] text-slate-400 mt-0.5 leading-snug">
+                      {locked ? 'Requer áudio/vídeo local vinculado' : desc}
+                    </div>
+                  </button>
+                );
+              })}
             </div>
           </div>
 

@@ -12,6 +12,7 @@ from __future__ import annotations
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+from xml.sax.saxutils import escape as xml_escape
 
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
@@ -137,14 +138,19 @@ class ProjectExporter:
             "MRQ ESTUDO MUSICAL — CIFRA E PROGRESSÃO HARMÔNICA",
             "==========================================================================",
             f"Projeto     : {project.get('name', '')}",
-            f"Arquivo     : {project.get('original_filename', '')}",
+            f"Arquivo     : {project.get('original_filename') or project.get('youtube_url') or ''}",
+            *(
+                [f"Vídeo Link  : {project.get('youtube_url')}"]
+                if project.get("youtube_url")
+                else []
+            ),
             f"BPM         : {project.get('bpm') or 'N/D'}  |  Compasso: {project.get('time_signature', '4/4')}",
             f"Tonalidade  : {project.get('musical_key') or 'N/D'}  |  Escala: {project.get('scale_name') or 'N/D'}",
             f"Afinação    : {project.get('semitones', 0):+d} st, {project.get('octaves', 0):+d} oit, {project.get('cents', 0):+d} cents",
             "==========================================================================",
             "",
             "SEQUÊNCIA RESUMIDA:",
-            " | ".join(c["symbol"] for c in chords if c.get("symbol") != "N.C.") or "(Nenhum acorde detectado)",
+            " | ".join(c["symbol"] for c in chords if c.get("symbol") != "N.C.") or "(Nenhum acorde adicionado ainda)",
             "",
             "LINHA DO TEMPO DE ACORDES:",
         ]
@@ -162,6 +168,20 @@ class ProjectExporter:
                 f"  {_fmt_time(t0)} -> {_fmt_time(float(c['end_sec']))}   {c['symbol']:<10} "
                 f"(Notas: {notes_str:<16} | Confiança: {conf_pct}%)"
             )
+
+        while marker_idx < len(markers):
+            mk = markers[marker_idx]
+            lines.append(f"\n[{mk.get('section_type', 'Seção').upper()}: {mk.get('label', '')} — {_fmt_time(mk['time_sec'])}]")
+            marker_idx += 1
+
+        loops = project.get("loops", [])
+        if loops:
+            lines.extend(["", "LOOPS A/B SALVOS:"])
+            for lp in loops:
+                lines.append(
+                    f"  - {lp.get('name', 'Loop')}: {_fmt_time(lp['start_sec'])} -> {_fmt_time(lp['end_sec'])} "
+                    f"({int(round(float(lp.get('speed', 1.0)) * 100))}%)"
+                )
 
         if project.get("study_notes"):
             lines.extend(["", "OBSERVAÇÕES DE ESTUDO:", project["study_notes"]])
@@ -212,11 +232,18 @@ class ProjectExporter:
         story = [
             Paragraph("MRQ ESTUDO MUSICAL — Relatório de Análise Musical", title_style),
             Paragraph(
-                f"Projeto: <b>{project.get('name', 'Sem nome')}</b> &nbsp;|&nbsp; "
+                f"Projeto: <b>{xml_escape(str(project.get('name', 'Sem nome')))}</b> &nbsp;|&nbsp; "
                 f"Gerado em {datetime.now().strftime('%d/%m/%Y %H:%M')}",
                 subtitle_style,
             ),
         ]
+        if project.get("youtube_url"):
+            story.append(
+                Paragraph(
+                    f"<b>Fonte / Link do Vídeo:</b> {xml_escape(str(project['youtube_url']))}",
+                    subtitle_style,
+                )
+            )
 
         # Technical & Musical Summary Table
         dur_str = _fmt_time(float(project.get("duration_sec", 0.0)))
@@ -390,7 +417,7 @@ class ProjectExporter:
 
         if project.get("study_notes"):
             story.append(Paragraph("4. Anotações do Estudante", h2_style))
-            story.append(Paragraph(str(project["study_notes"]).replace("\n", "<br/>"), body_style))
+            story.append(Paragraph(xml_escape(str(project["study_notes"])).replace("\n", "<br/>"), body_style))
 
         doc.build(story)
         return out

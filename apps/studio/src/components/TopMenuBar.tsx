@@ -150,7 +150,7 @@ export const TopMenuBar: React.FC<TopMenuBarProps> = (props) => {
                   type="button"
                   onClick={() => setOpenMenu(openMenu === menuName ? null : menuName)}
                   onMouseEnter={() => openMenu && setOpenMenu(menuName)}
-                  className={`px-2.5 py-1.5 rounded-md transition flex items-center gap-1 ${
+                  className={`px-2 py-1.5 rounded-md transition flex items-center gap-1 whitespace-nowrap ${
                     openMenu === menuName
                       ? 'bg-slate-800 text-sky-300'
                       : 'text-slate-300 hover:bg-slate-800/70 hover:text-white'

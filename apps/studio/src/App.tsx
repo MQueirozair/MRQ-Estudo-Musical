@@ -357,12 +357,15 @@ export default function App() {
   const runAnalysis = useCallback(
     async (kind: 'full' | 'bpm' | 'key' | 'notes' | 'chords') => {
       if (!project?.id || !project.audio_file_path) {
-        showToast(
-          'info',
-          project?.source_type === 'youtube'
-            ? 'Análise por IA requer arquivo de áudio local (o Player oficial do YouTube não baixa mídia).'
-            : 'Importe um arquivo de áudio primeiro.'
-        );
+        if (project?.source_type === 'youtube') {
+          setBottomTab('stems');
+          showToast(
+            'info',
+            'Para rodar Análise IA neste vídeo do YouTube, clique em "Vincular Áudio (IA/Stems)" ou grave pelo Microfone/Interface.'
+          );
+        } else {
+          showToast('info', 'Importe um arquivo de áudio ou vídeo primeiro.');
+        }
         return;
       }
       const labels = {
@@ -922,7 +925,7 @@ export default function App() {
 
       {/* Toast Notification */}
       {toast && (
-        <div className="fixed bottom-16 lg:bottom-4 right-4 z-50 max-w-md animate-fade-in">
+        <div className="fixed top-14 right-4 z-50 max-w-md animate-fade-in">
           <div
             className={`px-3.5 py-2.5 rounded-xl border shadow-2xl flex items-center gap-2 text-xs font-medium ${
               toast.kind === 'error'
@@ -1481,6 +1484,7 @@ export default function App() {
           defaultScope={exportModalState.scope}
           defaultStemKey={exportModalState.stemKey}
           onClose={() => setExportModalState((s) => ({ ...s, open: false }))}
+          onAttachLocalAudio={() => attachAudioInputRef.current?.click()}
           onRunExport={handleExportRun}
         />
       )}
