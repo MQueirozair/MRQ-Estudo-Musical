@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ChevronDown, ChevronUp, Film, FolderOpen, Sparkles, Youtube } from 'lucide-react';
+import { ChevronDown, ChevronUp, Download, Film, FolderOpen, Loader2, Sparkles, Youtube } from 'lucide-react';
 import { formatTime } from '../data/chordDiagrams';
 
 interface LocalVideoStageProps {
@@ -14,6 +14,7 @@ interface LocalVideoStageProps {
   speed: number;
   onOpenVideoModal: () => void;
   onOpenLocalFile: () => void;
+  onQuickConvertFullVideo?: (fmt: 'mp3' | 'wav' | 'flac' | 'm4a' | 'ogg' | 'aac' | 'aiff') => Promise<void>;
 }
 
 /**
@@ -33,9 +34,12 @@ export const LocalVideoStage: React.FC<LocalVideoStageProps> = ({
   speed,
   onOpenVideoModal,
   onOpenLocalFile,
+  onQuickConvertFullVideo,
 }) => {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [collapsed, setCollapsed] = useState(false);
+  const [convertFmt, setConvertFmt] = useState<'mp3' | 'wav' | 'flac' | 'm4a' | 'ogg' | 'aac' | 'aiff'>('mp3');
+  const [converting, setConverting] = useState(false);
 
   // Keep playbackRate synced to C++17 DSP speed
   useEffect(() => {
@@ -103,6 +107,43 @@ export const LocalVideoStage: React.FC<LocalVideoStageProps> = ({
               {musicalKey || 'Tom —'}
             </div>
           </div>
+
+          {onQuickConvertFullVideo && (
+            <div className="flex items-center gap-1 bg-emerald-950/50 border border-emerald-500/40 rounded-lg p-0.5">
+              <select
+                value={convertFmt}
+                onChange={(e) => setConvertFmt(e.target.value as any)}
+                disabled={converting}
+                className="bg-slate-900 text-emerald-300 text-[11px] font-bold uppercase px-2 py-1 rounded-md focus:outline-none"
+                aria-label="Formato para converter vídeo completo"
+              >
+                <option value="mp3">MP3</option>
+                <option value="wav">WAV</option>
+                <option value="flac">FLAC</option>
+                <option value="m4a">M4A</option>
+                <option value="ogg">OGG</option>
+                <option value="aac">AAC</option>
+                <option value="aiff">AIFF</option>
+              </select>
+              <button
+                type="button"
+                disabled={converting}
+                onClick={async () => {
+                  setConverting(true);
+                  try {
+                    await onQuickConvertFullVideo(convertFmt);
+                  } finally {
+                    setConverting(false);
+                  }
+                }}
+                className="px-2.5 py-1 rounded-md bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-[11px] font-bold flex items-center gap-1.5 transition"
+                title="Converter o vídeo inteiro diretamente para áudio no formato escolhido"
+              >
+                {converting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+                <span>Converter Vídeo → {convertFmt.toUpperCase()}</span>
+              </button>
+            </div>
+          )}
 
           <button
             type="button"

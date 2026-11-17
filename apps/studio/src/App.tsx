@@ -33,7 +33,7 @@ import { WaveformCanvas } from './components/WaveformCanvas';
 import { YouTubeStudyPlayer, type YouTubeStudyPlayerHandle } from './components/YouTubeStudyPlayer';
 import { LocalVideoStage } from './components/LocalVideoStage';
 import { AttachAudioBanner } from './components/AttachAudioBanner';
-import { SystemAudioCaptureBar } from './components/SystemAudioCaptureBar';
+import { SystemAudioCaptureBar, type AutoExportAudioFormat } from './components/SystemAudioCaptureBar';
 import { YouTubeModal } from './components/YouTubeModal';
 import { SpeedPitchPanel } from './components/SpeedPitchPanel';
 import { LoopPanel } from './components/LoopPanel';
@@ -44,7 +44,7 @@ import { TrackInfoPanel } from './components/TrackInfoPanel';
 import { ProjectModal } from './components/ProjectModal';
 import { ExportModal } from './components/ExportModal';
 import { ModelManagerModal } from './components/ModelManagerModal';
-import { HelpModals } from './components/HelpModals';
+import { HelpModals, type HelpTab } from './components/HelpModals';
 
 interface HistorySnapshot {
   notes: TranscribedNote[];
@@ -117,13 +117,14 @@ export default function App() {
   const [projectsModalOpen, setProjectsModalOpen] = useState(false);
   const [youtubeModalOpen, setYoutubeModalOpen] = useState(false);
   const [captureBarOpen, setCaptureBarOpen] = useState(false);
+  const [videoEndSignal, setVideoEndSignal] = useState(0);
   const [exportModalState, setExportModalState] = useState<{
     open: boolean;
     scope: 'full' | 'loop' | 'stem' | 'stems_mix';
     stemKey?: StemKey;
   }>({ open: false, scope: 'full' });
   const [modelsModalOpen, setModelsModalOpen] = useState(false);
-  const [helpTab, setHelpTab] = useState<'shortcuts' | 'manual' | 'diagnostics' | 'about' | null>(null);
+  const [helpTab, setHelpTab] = useState<HelpTab | null>(null);
 
   const showToast = useCallback((kind: 'info' | 'error' | 'success', msg: string) => {
     setToast({ kind, msg });
@@ -601,25 +602,40 @@ export default function App() {
     }, 60);
   }, [isYouTubeMode, ytAudioSource]);
 
-  // Attach captured system audio (WASAPI loopback / stereo input) to current project or create new project
+  // Attach captured system audio (WASAPI loopback / stereo input) to current project & optionally auto-convert/download
   const handleCapturedSystemAudio = useCallback(
-    async (file: File, meta: { durationSec: number; peakDb: number }) => {
+    async (file: File, meta: { durationSec: number; peakDb: number; autoFormat: AutoExportAudioFormat }) => {
       setIsBusy(true);
       setBusyText('Gerando forma de onda do som capturado...');
       try {
         const targetId = project?.id;
         const res = await api.importAudioFiles([file], targetId);
         if (res.imported.length > 0) {
-          const updatedId = res.imported[0].id;
+          const updatedProj = res.imported[0];
+          const updatedId = updatedProj.id;
           await loadProject(updatedId);
           setYtAudioSource('dsp');
-          showToast(
-            'success',
-            `Som capturado (${meta.durationSec.toFixed(1)}s · pico ${meta.peakDb.toFixed(1)} dB)! Forma de onda gerada — MP3/WAV/FLAC, IA, Pitch e 4 Stems desbloqueados!`
-          );
+
+          if (meta.autoFormat && meta.autoFormat !== 'none') {
+            setBusyText(`Convertendo áudio completo para ${meta.autoFormat.toUpperCase()}...`);
+            const savedName = await api.exportFile(
+              updatedId,
+              { format: meta.autoFormat, scope: 'full', speed: 1.0, semitones: 0, cents: 0 },
+              `${updatedProj.name || 'audio_completo'}.${meta.autoFormat}`
+            );
+            showToast(
+              'success',
+              `Áudio capturado (${meta.durationSec.toFixed(1)}s · ${meta.peakDb.toFixed(1)} dB), Forma de Onda gerada e convertido em ${savedName}!`
+            );
+          } else {
+            showToast(
+              'success',
+              `Som capturado (${meta.durationSec.toFixed(1)}s · pico ${meta.peakDb.toFixed(1)} dB)! Forma de onda gerada — MP3/WAV/FLAC/M4A/OGG/AIFF, IA, Pitch e 4 Stems desbloqueados!`
+            );
+          }
         }
       } catch (err: any) {
-        showToast('error', err?.message || 'Erro ao importar áudio capturado.');
+        showToast('error', err?.message || 'Erro ao importar/converter áudio capturado.');
         throw err;
       } finally {
         setIsBusy(false);
@@ -627,6 +643,31 @@ export default function App() {
       }
     },
     [project?.id, loadProject, showToast]
+  );
+
+  const handleQuickConvertFullAudio = useCallback(
+    async (fmt: 'mp3' | 'wav' | 'flac' | 'm4a' | 'ogg' | 'aac' | 'aiff') => {
+      if (!project?.id || !project.audio_file_path) {
+        showToast('info', 'Capture o som do sistema ou importe um vídeo/áudio primeiro.');
+        return;
+      }
+      setIsBusy(true);
+      setBusyText(`Convertendo áudio completo para ${fmt.toUpperCase()}...`);
+      try {
+        const savedName = await api.exportFile(
+          project.id,
+          { format: fmt, scope: 'full', speed: 1.0, semitones: 0, cents: 0 },
+          `${project.name}.${fmt}`
+        );
+        showToast('success', `Conversão concluída: ${savedName}`);
+      } catch (err: any) {
+        showToast('error', err?.message || `Erro ao converter para ${fmt.toUpperCase()}`);
+      } finally {
+        setIsBusy(false);
+        setBusyText('');
+      }
+    },
+    [project?.id, project?.audio_file_path, project?.name, showToast]
   );
 
   // Attach local audio/video or recording onto the CURRENT project (unlocks AI, Pitch & Stems on YouTube!)
@@ -1078,6 +1119,7 @@ export default function App() {
             onAudioSourceModeChange={handleSwitchYtAudioSource}
             onAttachAudioToVideo={() => attachAudioInputRef.current?.click()}
             onOpenSystemCapture={openSystemCapture}
+            onVideoEnded={() => setVideoEndSignal((n) => n + 1)}
             onTimeUpdate={setCurrentTime}
             onSeekRequest={playbackSeek}
             onDurationReady={handleYouTubeDurationReady}
@@ -1094,12 +1136,32 @@ export default function App() {
           />
         )}
 
-        {/* DOCKED SYSTEM AUDIO CAPTURE BAR (WASAPI Stereo Loopback + Selectable Device + Live VU Meter) */}
+        {/* DOCKED SYSTEM AUDIO CAPTURE & FULL-VIDEO CONVERTER BAR */}
         <div ref={captureBarRef}>
           <SystemAudioCaptureBar
             open={captureBarOpen}
+            isYouTubeMode={Boolean(isYouTubeMode)}
+            hasAttachedAudio={hasAudioTrack}
+            videoDuration={project?.duration_sec || 0}
+            videoCurrentTime={currentTime}
+            videoEndSignal={videoEndSignal}
             onClose={() => setCaptureBarOpen(false)}
+            onStartFullVideoPlayback={
+              isYouTubeMode
+                ? () => {
+                    setLoopEnabled(false);
+                    setSpeed(1.0);
+                    setYtAudioSource('youtube');
+                    ytPlayerRef.current?.startFromBeginningForCapture();
+                  }
+                : undefined
+            }
+            onPauseVideoPlayback={() => {
+              ytPlayerRef.current?.pause();
+              engineRef.current?.pause();
+            }}
             onCapturedFile={handleCapturedSystemAudio}
+            onQuickConvertAttached={handleQuickConvertFullAudio}
           />
         </div>
 
@@ -1116,6 +1178,7 @@ export default function App() {
             speed={speed}
             onOpenVideoModal={() => setYoutubeModalOpen(true)}
             onOpenLocalFile={() => fileInputRef.current?.click()}
+            onQuickConvertFullVideo={handleQuickConvertFullAudio}
           />
         )}
 

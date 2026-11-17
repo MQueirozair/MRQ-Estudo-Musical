@@ -3,6 +3,7 @@ import {
   Activity,
   Download,
   FolderOpen,
+  HelpCircle,
   Sparkles,
   Upload,
   CheckCircle2,
@@ -11,6 +12,7 @@ import {
   Youtube,
 } from 'lucide-react';
 import type { ViewMode } from '../types/music';
+import type { HelpTab } from './HelpModals';
 
 interface MenuAction {
   label: string;
@@ -55,7 +57,7 @@ interface TopMenuBarProps {
   onAnalyzeNotes: () => void;
   onAnalyzeChords: () => void;
   onSeparateStems: () => void;
-  onOpenHelp: (tab: 'shortcuts' | 'manual' | 'diagnostics' | 'about') => void;
+  onOpenHelp: (tab: HelpTab) => void;
   onTapTempoClick: () => void;
 }
 
@@ -81,7 +83,7 @@ export const TopMenuBar: React.FC<TopMenuBarProps> = (props) => {
       { label: 'Abrir Vídeo do YouTube...', shortcut: 'Ctrl+Shift+Y', onClick: props.onOpenYouTubeModal, divider: true },
       { label: 'Salvar Projeto', shortcut: 'Ctrl+S', onClick: props.onSaveProject },
       { label: 'Salvar Como (Clonar Projeto)...', onClick: props.onSaveAs, divider: true },
-      { label: 'Exportar (MP3 / WAV / FLAC / MIDI / TXT / PDF)...', shortcut: 'Ctrl+E', onClick: props.onExportOpen },
+      { label: 'Exportar (MP3 / WAV / FLAC / M4A / OGG / AIFF / MIDI / PDF)...', shortcut: 'Ctrl+E', onClick: props.onExportOpen },
     ],
     Editar: [
       { label: 'Desfazer (Piano Roll / Acordes)', shortcut: 'Ctrl+Z', onClick: props.onUndo, disabled: !props.canUndo },
@@ -120,8 +122,9 @@ export const TopMenuBar: React.FC<TopMenuBarProps> = (props) => {
       { label: 'Reconhecer Acordes e Cifras (HMM)', onClick: props.onAnalyzeChords },
     ],
     Ajuda: [
+      { label: 'Guia Visual Completo (Texto + Imagens)', onClick: () => props.onOpenHelp('manual') },
+      { label: 'Tabela de Todos os Formatos (Importar & Exportar)', onClick: () => props.onOpenHelp('formats'), divider: true },
       { label: 'Atalhos de Teclado', shortcut: '?', onClick: () => props.onOpenHelp('shortcuts') },
-      { label: 'Manual Rápido de Utilização', onClick: () => props.onOpenHelp('manual') },
       { label: 'Diagnóstico & Verificar Atualizações', onClick: () => props.onOpenHelp('diagnostics'), divider: true },
       { label: 'Sobre o MRQ Estudo Musical', onClick: () => props.onOpenHelp('about') },
     ],
@@ -250,10 +253,20 @@ export const TopMenuBar: React.FC<TopMenuBarProps> = (props) => {
             type="button"
             onClick={props.onExportOpen}
             className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-emerald-600/90 hover:bg-emerald-500 text-white text-xs font-semibold transition"
-            title="Exportar Áudio, Loop, MIDI, Cifras ou Relatório PDF"
+            title="Exportar Áudio (MP3/WAV/FLAC/M4A/OGG/AAC/AIFF), Loop, MIDI, Cifras ou Relatório PDF"
           >
             <Download className="w-3.5 h-3.5" />
             <span className="hidden sm:inline">Exportar</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => props.onOpenHelp('manual')}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-sky-600/25 text-sky-300 hover:text-white text-xs font-semibold border border-sky-500/35 transition"
+            title="Abrir Central de Ajuda Visual (Guia Completo, Imagens e Todos os Formatos)"
+          >
+            <HelpCircle className="w-3.5 h-3.5" />
+            <span className="hidden xl:inline">Ajuda</span>
           </button>
 
           <button

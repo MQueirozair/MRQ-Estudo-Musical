@@ -39,9 +39,9 @@ export const ExportModal: React.FC<ExportModalProps> = ({
   onRunExport,
 }) => {
   const hasAudio = Boolean(project.audio_file_path);
-  const [format, setFormat] = useState<'mp3' | 'wav' | 'flac' | 'mid' | 'txt_notes' | 'txt_chords' | 'pdf'>(
-    hasAudio ? 'mp3' : 'pdf'
-  );
+  const [format, setFormat] = useState<
+    'mp3' | 'wav' | 'flac' | 'm4a' | 'ogg' | 'aac' | 'aiff' | 'mid' | 'txt_notes' | 'txt_chords' | 'pdf'
+  >(hasAudio ? 'mp3' : 'pdf');
   const [scope, setScope] = useState<'full' | 'loop' | 'selection' | 'stem' | 'stems_mix'>(defaultScope);
   const [stemKey, setStemKey] = useState<StemKey>(defaultStemKey);
   const [applyDsp, setApplyDsp] = useState(true);
@@ -49,10 +49,13 @@ export const ExportModal: React.FC<ExportModalProps> = ({
   const [customB, setCustomB] = useState(loopB > loopA ? loopB : project.duration_sec);
   const [busy, setBusy] = useState(false);
 
+  const isAudioFormatId = (f: string) =>
+    f === 'mp3' || f === 'wav' || f === 'flac' || f === 'm4a' || f === 'ogg' || f === 'aac' || f === 'aiff';
+
   React.useEffect(() => {
     if (open) {
       setFormat((prev) => {
-        const prevIsAudio = prev === 'mp3' || prev === 'wav' || prev === 'flac';
+        const prevIsAudio = isAudioFormatId(prev);
         if (!hasAudio && prevIsAudio) return 'pdf';
         if (hasAudio && defaultScope !== 'full' && !prevIsAudio) return 'mp3';
         return prev;
@@ -66,7 +69,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
 
   if (!open) return null;
 
-  const isAudioFmt = format === 'mp3' || format === 'wav' || format === 'flac';
+  const isAudioFmt = isAudioFormatId(format);
   const totalSt = semitones + octaves * 12;
   const hasStems = Boolean(project.analysis?.stems?.stems?.vocals);
 
@@ -109,9 +112,13 @@ export const ExportModal: React.FC<ExportModalProps> = ({
     requiresAudio: boolean;
     Icon: React.FC<any>;
   }> = [
-    { id: 'mp3', label: 'MP3 (192 kbps)', desc: 'Compacto para celular e estudo portátil', requiresAudio: true, Icon: FileAudio },
-    { id: 'wav', label: 'WAV (PCM 16-bit)', desc: 'Sem perdas, máxima qualidade', requiresAudio: true, Icon: FileAudio },
-    { id: 'flac', label: 'FLAC (Lossless)', desc: 'Compressão sem perdas', requiresAudio: true, Icon: FileAudio },
+    { id: 'mp3', label: 'MP3 (192 kbps)', desc: 'Universal e compacto para celular e estudo', requiresAudio: true, Icon: FileAudio },
+    { id: 'wav', label: 'WAV (PCM 16-bit)', desc: 'Sem perdas, máxima qualidade de estúdio', requiresAudio: true, Icon: FileAudio },
+    { id: 'flac', label: 'FLAC (Lossless)', desc: 'Sem perdas com arquivo ~50% menor', requiresAudio: true, Icon: FileAudio },
+    { id: 'm4a', label: 'M4A (AAC)', desc: 'Alta eficiência para iPhone, Mac e Windows', requiresAudio: true, Icon: FileAudio },
+    { id: 'ogg', label: 'OGG (Opus 48 kHz)', desc: 'Super leve com altíssima fidelidade', requiresAudio: true, Icon: FileAudio },
+    { id: 'aac', label: 'AAC (ADTS)', desc: 'Áudio leve pronto para streaming', requiresAudio: true, Icon: FileAudio },
+    { id: 'aiff', label: 'AIFF (PCM Estúdio)', desc: 'Sem perdas padrão Logic / Pro Tools / Mac', requiresAudio: true, Icon: FileAudio },
     { id: 'mid', label: 'MIDI (.mid)', desc: 'Transcrição editada do Piano Roll (SMF)', requiresAudio: false, Icon: FileMusic },
     { id: 'txt_notes', label: 'Notas (TXT)', desc: 'Tabela completa de notas, tempos e confiança', requiresAudio: false, Icon: FileText },
     { id: 'txt_chords', label: 'Cifras (TXT)', desc: 'Progressão harmônica, marcadores e loops', requiresAudio: false, Icon: FileText },
@@ -120,7 +127,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="bg-[#0F172A] border border-slate-700 rounded-2xl w-full max-w-xl overflow-hidden shadow-2xl">
+      <div className="bg-[#0F172A] border border-slate-700 rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl">
         <div className="px-4 py-3 border-b border-slate-800 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Download className="w-4 h-4 text-emerald-400" />
@@ -137,9 +144,10 @@ export const ExportModal: React.FC<ExportModalProps> = ({
               <div className="text-[11px] text-slate-300 leading-relaxed">
                 <strong className="text-sky-300">Modo Vídeo YouTube:</strong> você já pode exportar{' '}
                 <strong>Relatório PDF</strong>, <strong>Cifras (TXT)</strong>, <strong>Notas (TXT)</strong> e{' '}
-                <strong>MIDI (.mid)</strong> agora mesmo. Para converter e exportar{' '}
-                <strong>MP3 / WAV / FLAC</strong>, capture o <strong className="text-emerald-300">Som do Sistema (Saída Estéreo)</strong> ou
-                vincule um arquivo local:
+                <strong>MIDI (.mid)</strong> agora mesmo. Para converter o vídeo inteiro em{' '}
+                <strong>MP3 / WAV / FLAC / M4A / OGG / AAC / AIFF</strong>, use o{' '}
+                <strong className="text-emerald-300">Conversor &amp; Captura Completa (0:00 → Fim)</strong> ou vincule
+                um arquivo local:
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 {onOpenSystemCapture && (

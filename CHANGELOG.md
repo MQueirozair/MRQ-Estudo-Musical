@@ -4,6 +4,17 @@ Todas as mudanças relevantes no **MRQ Estudo Musical** serão documentadas nest
 
 O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e o projeto adota [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [1.0.4] - 2026-11-17
+
+### Adicionado e Melhorado
+- **Conversor Completo de Vídeo → Áudio em 1 Clique (7 Formatos de Áudio + 4 Documentos)**:
+  - Desbloqueados **todos os 7 formatos de áudio de saída** no backend, exportador e interface: **MP3 (192 kbps)**, **WAV (PCM 16-bit)**, **FLAC (Lossless)**, **M4A (AAC)**, **OGG (Opus 48 kHz)**, **AAC (ADTS)** e **AIFF (PCM Estúdio)** — somados a **MIDI (.mid)**, **Notas (.txt)**, **Cifras (.txt)** e **Relatório (.pdf)** (11 formatos no total).
+  - Novo modo **Capturar Vídeo Completo (0:00 → Fim) & Converter** na barra `SystemAudioCaptureBar`: volta automaticamente o vídeo do YouTube para `0:00`, dá Play em 100%, monitora VU estéreo L/R + barra de progresso, para automaticamente ao final do vídeo, gera a Forma de Onda completa e já baixa o áudio no formato escolhido.
+  - Novo conversor em 1 clique no player de vídeos locais (`LocalVideoStage.tsx`) para extrair e baixar instantaneamente o áudio completo de vídeos `.mp4`, `.webm`, `.mov`, `.mkv` e `.m4v` em qualquer um dos 7 formatos.
+- **Central de Ajuda Visual Completa com Texto, 4 Imagens Ilustradas e Tabela de Todos os Formatos**:
+  - Botão **Ajuda** dedicado na barra superior + modal `HelpModals.tsx` reformulado com 4 ilustrações PT-BR em alta resolução (`apps/studio/public/help/*.png`) com ampliação em tela cheia, guia passo a passo de todo o programa e tabela completa dos 12 formatos de entrada e 11 de saída.
+  - `docs/USER_MANUAL.md` atualizado com todas as imagens e tabelas.
+
 ## [1.0.3] - 2026-11-17
 
 ### Corrigido e Adicionado

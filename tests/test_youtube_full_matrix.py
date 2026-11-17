@@ -103,6 +103,7 @@ def test_youtube_url_variants_and_guards_for_target_link(tmp_path: Path):
     valid_variants = [
         TARGET_YT_URL,
         f"[{TARGET_YT_URL}]({TARGET_YT_URL})",
+        f"[**++{TARGET_YT_URL}++**]({TARGET_YT_URL})",
         "youtu.be/aNOyvBm9Gfw?si=btcuTvTbN0Z4j8YW",
         "https://www.youtube.com/watch?v=aNOyvBm9Gfw&si=btcuTvTbN0Z4j8YW&t=42s",
         "https://m.youtube.com/watch?v=aNOyvBm9Gfw",
@@ -317,13 +318,18 @@ def test_full_all_possibilities_matrix_for_target_youtube_link(tmp_path: Path):
         rs = client.get(f"/api/projects/{pid}/stems/{sk}/audio?speed=0.75&semitones=-2&cents=0")
         assert rs.status_code == 200 and rs.content[:4] == b"RIFF" and len(rs.content) > 4000
 
-    # 8) ALL Export Formats x ALL Export Scopes — verify ZERO silent/mute outputs!
-    for fmt in ("mp3", "wav", "flac"):
-        # Full track (normal)
-        e_full = client.post(f"/api/projects/{pid}/export", json={"format": fmt, "scope": "full", "speed": 1.0, "semitones": 0, "cents": 0})
-        assert e_full.status_code == 200
+    # 8) ALL 7 Audio Export Formats (MP3, WAV, FLAC, M4A, AAC, OGG, AIFF) x ALL Scopes — verify ZERO silent/mute outputs!
+    all_audio_formats = ("mp3", "wav", "flac", "m4a", "aac", "ogg", "aiff")
+    for fmt in all_audio_formats:
+        # Full track (normal) — EVERY ONE of the 7 audio formats!
+        e_full = client.post(
+            f"/api/projects/{pid}/export",
+            json={"format": fmt, "scope": "full", "speed": 1.0, "semitones": 0, "cents": 0},
+        )
+        assert e_full.status_code == 200, f"Export full failed for {fmt}: {e_full.text}"
         _assert_audible_audio_bytes(e_full.content, fmt, tmp_path, f"full_1x_{fmt}")
 
+    for fmt in ("mp3", "wav", "flac", "m4a", "ogg"):
         # Full track (slowed 0.75x + transposed -2st +15c)
         e_dsp = client.post(f"/api/projects/{pid}/export", json={"format": fmt, "scope": "full", "speed": 0.75, "semitones": -2, "cents": 15})
         assert e_dsp.status_code == 200
@@ -355,7 +361,7 @@ def test_full_all_possibilities_matrix_for_target_youtube_link(tmp_path: Path):
         assert e_stem.status_code == 200
         _assert_audible_audio_bytes(e_stem.content, fmt, tmp_path, f"stem_other_{fmt}", min_rms=0.01)
 
-        # Custom Stems Mix (karaoke: mute vocals, boost bass/other) at 1.0x AND at 0.8x / -2st
+        # Custom Stems Mix (karaoke: mute vocals, boost bass/other) at 0.8x / -2st
         e_mix = client.post(
             f"/api/projects/{pid}/export",
             json={

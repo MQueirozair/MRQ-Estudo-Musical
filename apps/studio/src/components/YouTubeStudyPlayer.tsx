@@ -32,6 +32,7 @@ export interface YouTubeStudyPlayerHandle {
   seek: (sec: number) => void;
   setPlaybackRate: (rate: number) => void;
   setVolume: (vol: number, muted: boolean) => void;
+  startFromBeginningForCapture: () => void;
 }
 
 interface YouTubeStudyPlayerProps {
@@ -67,6 +68,7 @@ interface YouTubeStudyPlayerProps {
   onAudioSourceModeChange?: (mode: 'youtube' | 'dsp') => void;
   onAttachAudioToVideo?: () => void;
   onOpenSystemCapture?: () => void;
+  onVideoEnded?: () => void;
 }
 
 declare global {
@@ -174,6 +176,7 @@ export const YouTubeStudyPlayer = forwardRef<YouTubeStudyPlayerHandle, YouTubeSt
       onAudioSourceModeChange,
       onAttachAudioToVideo,
       onOpenSystemCapture,
+      onVideoEnded,
     } = props;
 
     const isDspMaster = hasAttachedAudio && audioSourceMode === 'dsp';
@@ -211,6 +214,9 @@ export const YouTubeStudyPlayer = forwardRef<YouTubeStudyPlayerHandle, YouTubeSt
 
     const onPrecountTickRef = useRef(onPrecountTick);
     onPrecountTickRef.current = onPrecountTick;
+
+    const onVideoEndedRef = useRef(onVideoEnded);
+    onVideoEndedRef.current = onVideoEnded;
 
     const precountTimersRef = useRef<number[]>([]);
     const precountBusyRef = useRef(false);
@@ -341,13 +347,15 @@ export const YouTubeStudyPlayer = forwardRef<YouTubeStudyPlayerHandle, YouTubeSt
                   }
                 } else if (ev.data === YTState.PAUSED || ev.data === YTState.ENDED) {
                   onPlayStateChangeRef.current(false);
-                  if (
-                    ev.data === YTState.ENDED &&
-                    loopRef.current.enabled &&
-                    loopRef.current.b > loopRef.current.a + 0.1
-                  ) {
-                    ev.target.seekTo(loopRef.current.a, true);
-                    runWithPrecount(() => ev.target.playVideo());
+                  if (ev.data === YTState.ENDED) {
+                    onVideoEndedRef.current?.();
+                    if (
+                      loopRef.current.enabled &&
+                      loopRef.current.b > loopRef.current.a + 0.1
+                    ) {
+                      ev.target.seekTo(loopRef.current.a, true);
+                      runWithPrecount(() => ev.target.playVideo());
+                    }
                   }
                 }
               },
@@ -570,6 +578,21 @@ export const YouTubeStudyPlayer = forwardRef<YouTubeStudyPlayerHandle, YouTubeSt
             playerRef.current?.setVolume?.(Math.round(vol * 100));
             if (isMuted) playerRef.current?.mute?.();
             else playerRef.current?.unMute?.();
+          } catch {
+            // ignore
+          }
+        },
+        startFromBeginningForCapture: () => {
+          clearPrecount();
+          const p = playerRef.current;
+          if (!p) return;
+          try {
+            p.unMute?.();
+            p.setVolume?.(100);
+            p.setPlaybackRate?.(1.0);
+            p.seekTo?.(0, true);
+            onTimeUpdate(0);
+            p.playVideo?.();
           } catch {
             // ignore
           }

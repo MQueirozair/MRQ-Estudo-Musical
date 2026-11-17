@@ -859,7 +859,7 @@ def create_app(data_dir: Optional[str | Path] = None) -> FastAPI:
         ts = int(time.time())
         fmt = req.format.lower()
 
-        if fmt in ("mp3", "wav", "flac"):
+        if fmt in ("mp3", "wav", "flac", "m4a", "aac", "ogg", "aiff"):
             out_path = audio_mgr.exports_dir / f"{safe_name}_{req.scope}_{ts}.{fmt}"
             try:
                 if req.scope == "stem":
@@ -931,7 +931,15 @@ def create_app(data_dir: Optional[str | Path] = None) -> FastAPI:
                     )
             except ValueError as exc:
                 raise HTTPException(status_code=400, detail=str(exc))
-            mime_map = {"mp3": "audio/mpeg", "wav": "audio/wav", "flac": "audio/flac"}
+            mime_map = {
+                "mp3": "audio/mpeg",
+                "wav": "audio/wav",
+                "flac": "audio/flac",
+                "m4a": "audio/mp4",
+                "aac": "audio/aac",
+                "ogg": "audio/ogg",
+                "aiff": "audio/aiff",
+            }
             return FileResponse(str(out_path), media_type=mime_map[fmt], filename=out_path.name)
 
         if fmt == "mid":

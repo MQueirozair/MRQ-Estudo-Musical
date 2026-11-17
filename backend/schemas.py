@@ -103,7 +103,7 @@ class AutosaveRequest(BaseModel):
 
 
 class ExportRequest(BaseModel):
-    format: str  # mp3 | wav | flac | mid | txt_notes | txt_chords | pdf
+    format: str  # mp3 | wav | flac | m4a | aac | ogg | aiff | mid | txt_notes | txt_chords | pdf
     scope: str = "full"  # full | selection | loop | stem | stems_mix
     start_sec: Optional[float] = None
     end_sec: Optional[float] = None

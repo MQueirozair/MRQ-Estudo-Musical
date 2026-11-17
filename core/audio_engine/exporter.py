@@ -32,6 +32,9 @@ def _fmt_time(sec: float) -> str:
     return f"{mins:02d}:{rem:05.2f}"
 
 
+SUPPORTED_AUDIO_EXPORT_FORMATS = ("mp3", "wav", "flac", "m4a", "aac", "ogg", "aiff")
+
+
 class ProjectExporter:
     def __init__(self, audio_manager: AudioManager, dsp: Optional[NativeDSPEngine] = None) -> None:
         self.audio_manager = audio_manager
@@ -48,10 +51,13 @@ class ProjectExporter:
         start_sec: Optional[float] = None,
         end_sec: Optional[float] = None,
     ) -> Path:
-        """Exports processed audio (time-stretched, transposed, trimmed) as MP3, WAV or FLAC."""
+        """Exports processed audio (time-stretched, transposed, trimmed) as MP3, WAV, FLAC, M4A, AAC, OGG or AIFF."""
         fmt_clean = fmt.lower().lstrip(".")
-        if fmt_clean not in ("mp3", "wav", "flac"):
-            raise ValueError(f"Formato de exportação de áudio não suportado: {fmt}")
+        if fmt_clean not in SUPPORTED_AUDIO_EXPORT_FORMATS:
+            raise ValueError(
+                f"Formato de exportação de áudio não suportado: {fmt}. "
+                f"Use: {', '.join(SUPPORTED_AUDIO_EXPORT_FORMATS)}"
+            )
 
         rendered = self.audio_manager.render_processed_audio(
             file_path=audio_path,
