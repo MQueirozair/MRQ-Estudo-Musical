@@ -12,7 +12,10 @@ import {
   ExternalLink,
   Flag,
   FolderOpen,
+  Maximize2,
   Minus,
+  MoveHorizontal,
+  MoveVertical,
   Plus,
   Radio,
   RefreshCw,
@@ -23,6 +26,7 @@ import {
 } from 'lucide-react';
 import type { MarkerItem } from '../types/music';
 import { formatTime } from '../data/chordDiagrams';
+import { VideoZoomStage } from './VideoZoomStage';
 
 export interface YouTubeStudyPlayerHandle {
   play: () => void;
@@ -191,6 +195,8 @@ export const YouTubeStudyPlayer = forwardRef<YouTubeStudyPlayerHandle, YouTubeSt
 
     // Timeline zoom & drag state
     const [zoom, setZoom] = useState(1);
+    const [timelineZoomV, setTimelineZoomV] = useState(1);
+    const [timelineWheelMode, setTimelineWheelMode] = useState<'auto' | 'zoomH' | 'zoomV'>('auto');
     const [viewStartFrac, setViewStartFrac] = useState(0);
     const timelineRef = useRef<HTMLDivElement | null>(null);
     const dragModeRef = useRef<'none' | 'create' | 'moveA' | 'moveB' | 'scrub'>('none');
@@ -696,19 +702,114 @@ export const YouTubeStudyPlayer = forwardRef<YouTubeStudyPlayerHandle, YouTubeSt
     const loopRightPct = secToPct(loopB);
     const playheadPct = secToPct(currentTime);
 
-    const adjustZoom = (factor: number) => {
-      setZoom((prev) => {
-        const next = Math.max(1, Math.min(16, Number((prev * factor).toFixed(2))));
-        if (next <= 1) {
-          setViewStartFrac(0);
-        } else if (duration > 0) {
-          const centerFrac = currentTime / duration;
-          const halfWin = 0.5 / next;
-          setViewStartFrac(Math.max(0, Math.min(1 - 1 / next, centerFrac - halfWin)));
-        }
-        return next;
-      });
+    const timelineWheelStateRef = useRef({
+      zoom,
+      timelineZoomV,
+      viewStartFrac,
+      duration,
+      currentTime,
+      timelineWheelMode,
+    });
+    timelineWheelStateRef.current = {
+      zoom,
+      timelineZoomV,
+      viewStartFrac,
+      duration,
+      currentTime,
+      timelineWheelMode,
     };
+
+    const adjustZoom = useCallback((factor: number, anchorClientX?: number) => {
+      const s = timelineWheelStateRef.current;
+      const next = Math.max(1, Math.min(32, Number((s.zoom * factor).toFixed(2))));
+      if (next <= 1.01) {
+        setViewStartFrac(0);
+      } else {
+        const el = timelineRef.current;
+        const rect = el?.getBoundingClientRect();
+        const cursorRatio =
+          anchorClientX !== undefined && rect && rect.width > 0
+            ? Math.max(0, Math.min(1, (anchorClientX - rect.left) / rect.width))
+            : s.duration > 0
+            ? Math.max(0, Math.min(1, (s.currentTime / s.duration - s.viewStartFrac) * s.zoom))
+            : 0.5;
+        const curSpanFrac = 1 / Math.max(1, s.zoom);
+        const anchorFrac = s.viewStartFrac + cursorRatio * curSpanFrac;
+        const nextSpanFrac = 1 / next;
+        const nextStart = Math.max(0, Math.min(1 - nextSpanFrac, anchorFrac - cursorRatio * nextSpanFrac));
+        setViewStartFrac(nextStart);
+      }
+      setZoom(next);
+    }, []);
+
+    const adjustTimelineZoomV = useCallback((factor: number) => {
+      setTimelineZoomV((prev) => Math.max(1, Math.min(3.0, Number((prev * factor).toFixed(2)))));
+    }, []);
+
+    // Native NON-PASSIVE wheel listener on the YouTube timeline track:
+    //   - Ctrl + Scroll          => Cursor-centered Horizontal Zoom (1x - 32x)
+    //   - Shift/Alt + Scroll     => Vertical Height Zoom (64px - 192px)
+    //   - Ctrl + Shift + Scroll  => Horizontal + Vertical Zoom together
+    //   - Direct Scroll mode     => Zoom H or Zoom V without modifier keys
+    //   - Plain Scroll (zoomed)  => Smooth horizontal pan
+    useEffect(() => {
+      const el = timelineRef.current;
+      if (!el) return;
+      const onWheel = (e: WheelEvent) => {
+        const s = timelineWheelStateRef.current;
+        const hasCtrl = e.ctrlKey || e.metaKey;
+        const hasShiftOrAlt = e.shiftKey || e.altKey;
+        const rawDelta = Math.abs(e.deltaY) >= Math.abs(e.deltaX) ? e.deltaY : e.deltaX;
+        if (rawDelta === 0) return;
+
+        const factorH = rawDelta < 0 ? 1.22 : 1 / 1.22;
+        const factorV = rawDelta < 0 ? 1.15 : 1 / 1.15;
+
+        if (hasCtrl && hasShiftOrAlt) {
+          e.preventDefault();
+          e.stopPropagation();
+          adjustZoom(factorH, e.clientX);
+          adjustTimelineZoomV(factorV);
+          return;
+        }
+        if (hasCtrl) {
+          e.preventDefault();
+          e.stopPropagation();
+          adjustZoom(factorH, e.clientX);
+          return;
+        }
+        if (hasShiftOrAlt) {
+          e.preventDefault();
+          e.stopPropagation();
+          adjustTimelineZoomV(factorV);
+          return;
+        }
+        if (s.timelineWheelMode === 'zoomH') {
+          e.preventDefault();
+          e.stopPropagation();
+          adjustZoom(factorH, e.clientX);
+          return;
+        }
+        if (s.timelineWheelMode === 'zoomV') {
+          e.preventDefault();
+          e.stopPropagation();
+          adjustTimelineZoomV(factorV);
+          return;
+        }
+        if (s.zoom > 1.01) {
+          e.preventDefault();
+          const spanFrac = 1 / s.zoom;
+          const maxStart = Math.max(0, 1 - spanFrac);
+          const step = (rawDelta > 0 ? 1 : -1) * spanFrac * 0.14;
+          setViewStartFrac((prev) => Math.max(0, Math.min(maxStart, prev + step)));
+        }
+      };
+
+      el.addEventListener('wheel', onWheel, { passive: false });
+      return () => el.removeEventListener('wheel', onWheel);
+    }, [adjustZoom, adjustTimelineZoomV]);
+
+    const timelineHeightPx = Math.round(64 * timelineZoomV);
 
     return (
       <section className="bg-[#0F172A] border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
@@ -830,9 +931,9 @@ export const YouTubeStudyPlayer = forwardRef<YouTubeStudyPlayerHandle, YouTubeSt
           </div>
         </div>
 
-        {/* Official YouTube 16:9 Cinema Stage */}
-        <div className="bg-black/95 px-3 py-3 sm:px-6 sm:py-4 flex justify-center border-b border-slate-800/80">
-          <div className="relative w-full max-w-[820px] aspect-video rounded-xl overflow-hidden bg-slate-950 border border-slate-800 shadow-2xl">
+        {/* Official YouTube 16:9 Cinema Stage with Horizontal + Vertical Zoom & Pan */}
+        <VideoZoomStage isIframe baseMaxWidthClass="max-w-[820px]">
+          <div className="relative w-full h-full">
             <div ref={mountRef} className="w-full h-full" />
 
             {!playerReady && !loadError && (
@@ -875,7 +976,7 @@ export const YouTubeStudyPlayer = forwardRef<YouTubeStudyPlayerHandle, YouTubeSt
               </div>
             )}
           </div>
-        </div>
+        </VideoZoomStage>
 
         {/* Interactive Zoomable Loop A -> B Timeline (TuneTranscriber v3 style) */}
         <div className="px-4 pt-3 pb-3 bg-[#0B1220] select-none">
@@ -895,41 +996,81 @@ export const YouTubeStudyPlayer = forwardRef<YouTubeStudyPlayerHandle, YouTubeSt
               )}
             </div>
 
-            <div className="flex items-center gap-2">
-              <span className="text-slate-400 hidden sm:inline">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-slate-400 hidden lg:inline">
                 {markers.length} marcas · {manualBeats.length} batidas
               </span>
-              <div className="flex items-center rounded-lg bg-slate-900 border border-slate-700 overflow-hidden">
+              {/* Zoom Horizontal (Timeline) */}
+              <div
+                className="flex items-center rounded-lg bg-slate-900 border border-slate-700 overflow-hidden"
+                title="Zoom Horizontal da Linha do Tempo (Ctrl+Scroll)"
+              >
+                <span className="px-1.5 text-sky-400 flex items-center gap-0.5 text-[10px] font-bold">
+                  <MoveHorizontal className="w-3 h-3" /> H
+                </span>
                 <button
                   type="button"
                   onClick={() => adjustZoom(1 / 1.5)}
-                  className="px-2 py-1 text-slate-300 hover:bg-slate-800 transition"
-                  title="Reduzir zoom"
+                  className="px-1.5 py-1 text-slate-300 hover:bg-slate-800 transition"
+                  title="Reduzir zoom horizontal (Ctrl+Scroll ↓)"
                 >
                   <Minus className="w-3 h-3" />
                 </button>
-                <span className="px-2 py-1 text-[10px] font-bold tracking-wider text-slate-300 border-x border-slate-800">
-                  ZOOM {zoom > 1 ? `${zoom.toFixed(1)}×` : ''}
+                <span className="px-1.5 py-1 text-[10px] font-mono font-bold text-sky-300 border-x border-slate-800">
+                  {zoom.toFixed(1)}×
                 </span>
                 <button
                   type="button"
                   onClick={() => adjustZoom(1.5)}
-                  className="px-2 py-1 text-slate-300 hover:bg-slate-800 transition"
-                  title="Aumentar zoom"
+                  className="px-1.5 py-1 text-slate-300 hover:bg-slate-800 transition"
+                  title="Aumentar zoom horizontal (Ctrl+Scroll ↑)"
                 >
                   <Plus className="w-3 h-3" />
                 </button>
               </div>
-              {zoom > 1 && (
+
+              {/* Zoom Vertical (Timeline Height) */}
+              <div
+                className="flex items-center rounded-lg bg-slate-900 border border-slate-700 overflow-hidden"
+                title="Zoom Vertical da Linha do Tempo (Shift/Alt+Scroll)"
+              >
+                <span className="px-1.5 text-violet-400 flex items-center gap-0.5 text-[10px] font-bold">
+                  <MoveVertical className="w-3 h-3" /> V
+                </span>
+                <button
+                  type="button"
+                  onClick={() => adjustTimelineZoomV(1 / 1.25)}
+                  className="px-1.5 py-1 text-slate-300 hover:bg-slate-800 transition"
+                  title="Reduzir zoom vertical (Shift/Alt+Scroll ↓)"
+                >
+                  <Minus className="w-3 h-3" />
+                </button>
+                <span className="px-1.5 py-1 text-[10px] font-mono font-bold text-violet-300 border-x border-slate-800">
+                  {timelineZoomV.toFixed(1)}×
+                </span>
+                <button
+                  type="button"
+                  onClick={() => adjustTimelineZoomV(1.25)}
+                  className="px-1.5 py-1 text-slate-300 hover:bg-slate-800 transition"
+                  title="Aumentar zoom vertical (Shift/Alt+Scroll ↑)"
+                >
+                  <Plus className="w-3 h-3" />
+                </button>
+              </div>
+
+              {(zoom > 1.01 || timelineZoomV > 1.01) && (
                 <button
                   type="button"
                   onClick={() => {
                     setZoom(1);
+                    setTimelineZoomV(1);
                     setViewStartFrac(0);
                   }}
-                  className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-[10px] text-slate-300"
+                  className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-[10px] font-bold text-slate-200 flex items-center gap-1"
+                  title="Resetar Zoom H e V da Linha do Tempo"
                 >
-                  1×
+                  <Maximize2 className="w-3 h-3" />
+                  <span>1:1</span>
                 </button>
               )}
             </div>
@@ -941,7 +1082,8 @@ export const YouTubeStudyPlayer = forwardRef<YouTubeStudyPlayerHandle, YouTubeSt
             onPointerDown={handleTimelinePointerDown}
             onPointerMove={handleTimelinePointerMove}
             onPointerUp={handleTimelinePointerUp}
-            className="relative h-16 rounded-xl bg-slate-950/90 border border-slate-800 overflow-hidden cursor-crosshair touch-none"
+            style={{ height: `${timelineHeightPx}px` }}
+            className="relative rounded-xl bg-slate-950/90 border border-slate-800 overflow-hidden cursor-crosshair touch-none transition-[height] duration-150"
           >
             {/* Subtle time grid ticks */}
             {ticks.map((t) => {
@@ -1093,14 +1235,41 @@ export const YouTubeStudyPlayer = forwardRef<YouTubeStudyPlayerHandle, YouTubeSt
 
           <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-400">
             <span>
-              Arraste na linha do tempo para criar um loop A→B · Clique para buscar · Pressione{' '}
-              <kbd className="px-1 py-0.5 rounded bg-slate-800 text-slate-200 font-mono text-[10px]">M</kbd> para marcar
-              ·{' '}
-              <kbd className="px-1 py-0.5 rounded bg-slate-800 text-slate-200 font-mono text-[10px]">B</kbd> para batida
+              <strong className="text-sky-300">Ctrl+Scroll</strong>: Zoom Horizontal ·{' '}
+              <strong className="text-violet-300">Shift/Alt+Scroll</strong>: Zoom Vertical · Arraste: Loop A→B ·{' '}
+              <kbd className="px-1 py-0.5 rounded bg-slate-800 text-slate-200 font-mono text-[10px]">M</kbd> marcar ·{' '}
+              <kbd className="px-1 py-0.5 rounded bg-slate-800 text-slate-200 font-mono text-[10px]">B</kbd> batida
             </span>
-            <span className="text-[10px] text-slate-500">
-              {isPlaying ? 'Reproduzindo' : 'Pausado'} · Velocidade {Math.round(speed * 100)}%
-            </span>
+            <div className="flex items-center gap-2">
+              <div className="flex items-center bg-slate-900 border border-slate-800 rounded-lg p-0.5 text-[10px]">
+                {(
+                  [
+                    { id: 'auto', label: 'Auto', title: 'Ctrl+Scroll: Zoom H · Shift/Alt+Scroll: Zoom V · Scroll: Navegar' },
+                    { id: 'zoomH', label: 'Zoom H', title: 'Roda do mouse dá Zoom Horizontal direto na linha do tempo' },
+                    { id: 'zoomV', label: 'Zoom V', title: 'Roda do mouse dá Zoom Vertical direto na linha do tempo' },
+                  ] as const
+                ).map((opt) => (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={() => setTimelineWheelMode(opt.id)}
+                    title={opt.title}
+                    className={`px-2 py-0.5 rounded font-semibold transition ${
+                      timelineWheelMode === opt.id
+                        ? opt.id === 'zoomV'
+                          ? 'bg-violet-500 text-slate-950'
+                          : 'bg-sky-500 text-slate-950'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+              <span className="text-[10px] text-slate-500 hidden sm:inline">
+                {isPlaying ? 'Reproduzindo' : 'Pausado'} · {Math.round(speed * 100)}%
+              </span>
+            </div>
           </div>
         </div>
       </section>

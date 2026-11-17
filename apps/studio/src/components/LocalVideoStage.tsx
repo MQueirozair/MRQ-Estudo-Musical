@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ChevronDown, ChevronUp, Download, Film, FolderOpen, Loader2, Sparkles, Youtube } from 'lucide-react';
 import { formatTime } from '../data/chordDiagrams';
+import { VideoZoomStage } from './VideoZoomStage';
 
 interface LocalVideoStageProps {
   videoUrl: string;
@@ -175,21 +176,20 @@ export const LocalVideoStage: React.FC<LocalVideoStageProps> = ({
       </div>
 
       {!collapsed && (
-        <div className="bg-black/95 px-3 py-3 sm:px-6 flex justify-center">
-          <div className="relative w-full max-w-[760px] aspect-video rounded-xl overflow-hidden bg-slate-950 border border-slate-800 shadow-2xl">
-            <video
-              ref={videoRef}
-              src={videoUrl}
-              muted
-              playsInline
-              preload="auto"
-              className="w-full h-full object-contain bg-black"
-            />
-            <div className="absolute bottom-2 right-2 px-2 py-0.5 rounded bg-black/70 border border-slate-700 text-[10px] font-mono text-sky-300 pointer-events-none">
-              Áudio: Motor DSP C++17 ({Math.round(speed * 100)}%)
-            </div>
-          </div>
-        </div>
+        <VideoZoomStage
+          isIframe={false}
+          baseMaxWidthClass="max-w-[760px]"
+          badgeText={`Áudio: Motor DSP C++17 (${Math.round(speed * 100)}%)`}
+        >
+          <video
+            ref={videoRef}
+            src={videoUrl}
+            muted
+            playsInline
+            preload="auto"
+            className="w-full h-full object-contain bg-black"
+          />
+        </VideoZoomStage>
       )}
     </section>
   );

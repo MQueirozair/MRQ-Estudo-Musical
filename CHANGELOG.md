@@ -4,6 +4,14 @@ Todas as mudanças relevantes no **MRQ Estudo Musical** serão documentadas nest
 
 O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e o projeto adota [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [1.0.5] - 2026-11-17
+
+### Adicionado e Melhorado
+- **Zoom Horizontal (`Ctrl + Scroll`) e Zoom Vertical (`Shift/Alt + Scroll`) na Forma de Onda, Linha do Tempo e Vídeo**:
+  - **`WaveformCanvas.tsx`**: listener nativo não-passivo (`{ passive: false }`) para impedir zoom indesejado da janela no Electron/navegador; **`Ctrl + Scroll`** dá Zoom Horizontal (`1.0× – 64.0×`) centralizado exatamente na posição do cursor do mouse; **`Shift + Scroll`** ou **`Alt + Scroll`** dá Zoom Vertical (`0.5× – 5.0×`) ampliando ganho da onda e altura do canvas em tempo real; **`Ctrl + Shift + Scroll`** amplia ambos juntos; controles visuais `H` e `V` sempre visíveis na barra (aceitando scroll direto sobre os botões) + seletor rápido **`Scroll do Mouse: [Auto | Zoom H | Zoom V]`** para uso com uma mão só + arraste com botão do meio para rolar horizontalmente + correção do auto-follow para não puxar a janela de volta ao dar zoom longe do playhead.
+  - **`VideoZoomStage.tsx` (aplicado ao Player do YouTube e ao Vídeo Local)**: Zoom Horizontal (`100% – 400%` via `Ctrl + Scroll`), Zoom Vertical (`100% – 400%` via `Shift/Alt + Scroll`), trava opcional de proporção (`H=V` / `H/V Livre`), escudo transparente automático ao segurar `Ctrl`/`Shift`/`Alt` sobre o iframe do YouTube para capturar o scroll sem falhas, arraste para enquadrar mãos/instrumento (`Mover`), seletor rápido **`[Auto | Zoom H | Zoom V | Mover]`**, HUD visual instantâneo e reset `1:1`.
+  - **`YouTubeStudyPlayer.tsx`**: linha do tempo interativa também atualizada com Zoom Horizontal (`Ctrl + Scroll`, `1× – 32×`) e Zoom Vertical (`Shift/Alt + Scroll`, altura `64px – 192px`) + seletor rápido de modo do scroll.
+
 ## [1.0.4] - 2026-11-17
 
 ### Adicionado e Melhorado

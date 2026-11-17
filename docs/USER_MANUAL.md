@@ -107,6 +107,10 @@ Guia completo com texto e imagens explicando **como o programa inteiro funciona*
 | `B` | Marcar Batida (calcula BPM automaticamente) |
 | `M` | Criar Marcador de seção na posição atual |
 | `T` | Tap Tempo |
+| `Ctrl + Scroll` | **Zoom Horizontal** (centralizado no cursor) na Forma de Onda, Linha do Tempo e Vídeo |
+| `Shift + Scroll` ou `Alt + Scroll` | **Zoom Vertical** (altura + ganho da Forma de Onda, Linha do Tempo e Vídeo) |
+| `Ctrl + Shift + Scroll` | **Zoom Horizontal + Vertical juntos** (Proporcional) |
+| `Scroll do Mouse` (modos `Zoom H` / `Zoom V` / `Mover`) | Zoom ou Enquadramento direto com **1 mão só** na Forma de Onda e no Vídeo |
 | `+` / `−` / `0` | Zoom + / Zoom − / Ajustar à música inteira |
 | `Ctrl+Shift+Y` | Abrir Link de Vídeo / YouTube |
 | `Ctrl+S` | Salvar projeto imediatamente |

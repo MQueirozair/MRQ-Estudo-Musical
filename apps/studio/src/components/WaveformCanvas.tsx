@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ZoomIn,
   ZoomOut,
@@ -8,7 +8,8 @@ import {
   Columns2,
   Flag,
   Grid,
-  Plus,
+  MoveHorizontal,
+  MoveVertical,
 } from 'lucide-react';
 import type {
   DetectedChord,
@@ -107,29 +108,206 @@ export const WaveformCanvas: React.FC<WaveformCanvasProps> = ({
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const hZoomBadgeRef = useRef<HTMLDivElement>(null);
+  const vZoomBadgeRef = useRef<HTMLDivElement>(null);
   const specOffscreenRef = useRef<HTMLCanvasElement | null>(null);
 
   const [viewStartSec, setViewStartSec] = useState(0);
   const [palette, setPalette] = useState<SpecPalette>('magma');
+  const [wheelMode, setWheelMode] = useState<'auto' | 'zoomH' | 'zoomV'>('auto');
   const [hoverInfo, setHoverInfo] = useState<{ x: number; y: number; text: string } | null>(null);
-  const dragModeRef = useRef<'none' | 'create' | 'moveA' | 'moveB'>('none');
+  const [zoomHud, setZoomHud] = useState<string | null>(null);
+  const hudTimerRef = useRef<number | null>(null);
+  const prevTimeRef = useRef(currentTime);
+
+  const dragModeRef = useRef<'none' | 'create' | 'moveA' | 'moveB' | 'pan'>('none');
   const dragAnchorSecRef = useRef(0);
+  const panStartXRef = useRef(0);
+  const panStartViewSecRef = useRef(0);
 
   const visibleSpan = duration > 0 ? duration / Math.max(1, zoomH) : 10;
   const maxStart = Math.max(0, duration - visibleSpan);
   const clampedStart = Math.min(viewStartSec, maxStart);
 
-  // Auto-follow playhead when zoomed in
+  // Smooth vertical canvas height growth when Zoom V > 1 (real vertical magnification + gain!)
+  const baseCanvasHeight = viewMode === 'split' ? 300 : 210;
+  const extraHeight = zoomV > 1 ? Math.round(Math.min(220, (zoomV - 1) * 72)) : 0;
+  const canvasHeight = baseCanvasHeight + extraHeight;
+
+  const flashHud = useCallback((msg: string) => {
+    setZoomHud(msg);
+    if (hudTimerRef.current) window.clearTimeout(hudTimerRef.current);
+    hudTimerRef.current = window.setTimeout(() => setZoomHud(null), 1300);
+  }, []);
+
   useEffect(() => {
-    if (zoomH <= 1.01) {
+    return () => {
+      if (hudTimerRef.current) window.clearTimeout(hudTimerRef.current);
+    };
+  }, []);
+
+  // Keep latest values in ref for native non-passive wheel listeners
+  const wheelStateRef = useRef({
+    duration,
+    zoomH,
+    zoomV,
+    clampedStart,
+    visibleSpan,
+    maxStart,
+    wheelMode,
+  });
+  wheelStateRef.current = {
+    duration,
+    zoomH,
+    zoomV,
+    clampedStart,
+    visibleSpan,
+    maxStart,
+    wheelMode,
+  };
+
+  const applyHorizontalZoom = useCallback(
+    (factor: number, anchorClientX?: number) => {
+      const s = wheelStateRef.current;
+      const nextZoomH = Number(Math.max(1, Math.min(64, s.zoomH * factor)).toFixed(2));
+      if (s.duration > 0) {
+        const rect = canvasRef.current?.getBoundingClientRect();
+        const cursorRatio =
+          anchorClientX !== undefined && rect && rect.width > 0
+            ? Math.max(0, Math.min(1, (anchorClientX - rect.left) / rect.width))
+            : 0.5;
+        const anchorTime = s.clampedStart + cursorRatio * s.visibleSpan;
+        const nextSpan = s.duration / nextZoomH;
+        const nextMaxStart = Math.max(0, s.duration - nextSpan);
+        const nextStart =
+          nextZoomH <= 1.01
+            ? 0
+            : Math.max(0, Math.min(nextMaxStart, anchorTime - cursorRatio * nextSpan));
+        setViewStartSec(nextStart);
+      }
+      onZoomHChange(nextZoomH);
+      flashHud(`Zoom Horizontal: ${nextZoomH.toFixed(1)}× · Vertical: ${s.zoomV.toFixed(1)}×`);
+    },
+    [onZoomHChange, flashHud]
+  );
+
+  const applyVerticalZoom = useCallback(
+    (factor: number) => {
+      const s = wheelStateRef.current;
+      const nextZoomV = Number(Math.max(0.5, Math.min(5.0, s.zoomV * factor)).toFixed(2));
+      onZoomVChange(nextZoomV);
+      flashHud(`Zoom Vertical: ${nextZoomV.toFixed(1)}× · Horizontal: ${s.zoomH.toFixed(1)}×`);
+    },
+    [onZoomVChange, flashHud]
+  );
+
+  // Reset viewStart when zoomed all the way back out
+  useEffect(() => {
+    if (zoomH <= 1.01 && viewStartSec !== 0) {
       setViewStartSec(0);
-      return;
     }
+  }, [zoomH, viewStartSec]);
+
+  // Auto-follow playhead ONLY when currentTime actually changes (so zooming/panning never snaps away!)
+  useEffect(() => {
+    const moved = Math.abs(currentTime - prevTimeRef.current) > 0.002;
+    prevTimeRef.current = currentTime;
+    if (!moved || zoomH <= 1.01) return;
     if (currentTime < clampedStart || currentTime > clampedStart + visibleSpan * 0.92) {
       const next = Math.max(0, Math.min(maxStart, currentTime - visibleSpan * 0.15));
       setViewStartSec(next);
     }
   }, [currentTime, zoomH, visibleSpan, maxStart, clampedStart]);
+
+  // Native NON-PASSIVE wheel listener on the Waveform/Spectrogram canvas:
+  //   - Ctrl + Scroll              => Cursor-centered Horizontal Zoom (prevents browser/Electron page zoom!)
+  //   - Shift + Scroll / Alt+Scroll => Vertical Zoom (amplitude + canvas height!)
+  //   - Ctrl + Shift + Scroll      => Horizontal + Vertical Zoom together
+  //   - WheelMode 'zoomH'/'zoomV'  => Direct mouse wheel zoom without modifier keys
+  //   - Plain Scroll (when zoomed) => Smooth horizontal pan
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const handleNativeWheel = (e: WheelEvent) => {
+      const s = wheelStateRef.current;
+      const hasCtrl = e.ctrlKey || e.metaKey;
+      const hasShiftOrAlt = e.shiftKey || e.altKey;
+      const rawDelta = Math.abs(e.deltaY) >= Math.abs(e.deltaX) ? e.deltaY : e.deltaX;
+      if (rawDelta === 0) return;
+
+      const factorH = rawDelta < 0 ? 1.22 : 1 / 1.22;
+      const factorV = rawDelta < 0 ? 1.16 : 1 / 1.16;
+
+      if (hasCtrl && hasShiftOrAlt) {
+        e.preventDefault();
+        e.stopPropagation();
+        applyHorizontalZoom(factorH, e.clientX);
+        applyVerticalZoom(factorV);
+        return;
+      }
+
+      if (hasCtrl) {
+        e.preventDefault();
+        e.stopPropagation();
+        applyHorizontalZoom(factorH, e.clientX);
+        return;
+      }
+
+      if (hasShiftOrAlt) {
+        e.preventDefault();
+        e.stopPropagation();
+        applyVerticalZoom(factorV);
+        return;
+      }
+
+      if (s.wheelMode === 'zoomH') {
+        e.preventDefault();
+        e.stopPropagation();
+        applyHorizontalZoom(factorH, e.clientX);
+        return;
+      }
+
+      if (s.wheelMode === 'zoomV') {
+        e.preventDefault();
+        e.stopPropagation();
+        applyVerticalZoom(factorV);
+        return;
+      }
+
+      // Default mode when zoomed horizontally: smooth horizontal pan
+      if (s.zoomH > 1.01) {
+        e.preventDefault();
+        const deltaSec = (rawDelta > 0 ? 1 : -1) * s.visibleSpan * 0.12;
+        setViewStartSec((prev) => Math.max(0, Math.min(s.maxStart, prev + deltaSec)));
+      }
+    };
+
+    canvas.addEventListener('wheel', handleNativeWheel, { passive: false });
+    return () => canvas.removeEventListener('wheel', handleNativeWheel);
+  }, [applyHorizontalZoom, applyVerticalZoom]);
+
+  // Direct scroll over toolbar Zoom H / Zoom V badges
+  useEffect(() => {
+    const hEl = hZoomBadgeRef.current;
+    const vEl = vZoomBadgeRef.current;
+    const onWheelH = (e: WheelEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      applyHorizontalZoom(e.deltaY < 0 ? 1.2 : 1 / 1.2);
+    };
+    const onWheelV = (e: WheelEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      applyVerticalZoom(e.deltaY < 0 ? 1.14 : 1 / 1.14);
+    };
+    hEl?.addEventListener('wheel', onWheelH, { passive: false });
+    vEl?.addEventListener('wheel', onWheelV, { passive: false });
+    return () => {
+      hEl?.removeEventListener('wheel', onWheelH);
+      vEl?.removeEventListener('wheel', onWheelV);
+    };
+  }, [applyHorizontalZoom, applyVerticalZoom]);
 
   // Pre-render offscreen spectrogram bitmap whenever spectrogram data or palette changes
   useEffect(() => {
@@ -169,7 +347,7 @@ export const WaveformCanvas: React.FC<WaveformCanvasProps> = ({
 
     const dpr = window.devicePixelRatio || 1;
     const width = Math.max(300, wrapper.clientWidth);
-    const height = viewMode === 'split' ? 300 : 210;
+    const height = canvasHeight;
 
     if (canvas.width !== Math.round(width * dpr) || canvas.height !== Math.round(height * dpr)) {
       canvas.width = Math.round(width * dpr);
@@ -466,6 +644,7 @@ export const WaveformCanvas: React.FC<WaveformCanvasProps> = ({
     loopB,
     zoomH,
     zoomV,
+    canvasHeight,
     clampedStart,
     visibleSpan,
     palette,
@@ -480,6 +659,17 @@ export const WaveformCanvas: React.FC<WaveformCanvasProps> = ({
 
   const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
     if (duration <= 0) return;
+
+    // Middle-click drag pans horizontally when zoomed in
+    if (e.button === 1 && zoomH > 1.01) {
+      e.preventDefault();
+      dragModeRef.current = 'pan';
+      panStartXRef.current = e.clientX;
+      panStartViewSecRef.current = clampedStart;
+      e.currentTarget.setPointerCapture(e.pointerId);
+      return;
+    }
+
     const rect = canvasRef.current!.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
@@ -514,6 +704,14 @@ export const WaveformCanvas: React.FC<WaveformCanvasProps> = ({
   const handlePointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const rect = canvasRef.current?.getBoundingClientRect();
     if (!rect || duration <= 0) return;
+
+    if (dragModeRef.current === 'pan') {
+      const dx = e.clientX - panStartXRef.current;
+      const dt = -(dx / Math.max(1, rect.width)) * visibleSpan;
+      setViewStartSec(Math.max(0, Math.min(maxStart, panStartViewSecRef.current + dt)));
+      return;
+    }
+
     const t = clientXToTime(e.clientX);
 
     // Hover frequency tooltip on spectrogram
@@ -566,17 +764,6 @@ export const WaveformCanvas: React.FC<WaveformCanvasProps> = ({
       }
     }
     dragModeRef.current = 'none';
-  };
-
-  const handleWheel = (e: React.WheelEvent<HTMLCanvasElement>) => {
-    if (e.ctrlKey || e.metaKey) {
-      e.preventDefault();
-      const factor = e.deltaY < 0 ? 1.25 : 0.8;
-      onZoomHChange(Math.max(1, Math.min(32, zoomH * factor)));
-    } else if (zoomH > 1) {
-      const deltaSec = (e.deltaY > 0 ? 1 : -1) * visibleSpan * 0.12;
-      setViewStartSec((prev) => Math.max(0, Math.min(maxStart, prev + deltaSec)));
-    }
   };
 
   return (
@@ -667,54 +854,80 @@ export const WaveformCanvas: React.FC<WaveformCanvasProps> = ({
           </button>
         </div>
 
-        {/* Zoom Controls */}
-        <div className="flex items-center gap-1.5">
-          <span className="text-[10px] text-slate-500 hidden md:inline">Zoom H:</span>
-          <button
-            type="button"
-            onClick={() => onZoomHChange(Math.max(1, zoomH / 1.5))}
-            className="p-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300"
-            title="Reduzir zoom horizontal"
+        {/* Horizontal & Vertical Zoom Controls (both support mouse wheel right over the badge!) */}
+        <div className="flex flex-wrap items-center gap-1.5">
+          {/* Zoom Horizontal */}
+          <div
+            ref={hZoomBadgeRef}
+            className="flex items-center gap-1 bg-slate-900 border border-slate-800 rounded-lg px-1.5 py-0.5"
+            title="Zoom Horizontal (Tempo) — Ctrl+Scroll no waveform ou role o mouse aqui"
           >
-            <ZoomOut className="w-3.5 h-3.5" />
-          </button>
-          <span className="font-mono text-[11px] text-sky-300 w-9 text-center">{zoomH.toFixed(1)}x</span>
-          <button
-            type="button"
-            onClick={() => onZoomHChange(Math.min(32, zoomH * 1.5))}
-            className="p-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300"
-            title="Aumentar zoom horizontal"
+            <MoveHorizontal className="w-3.5 h-3.5 text-sky-400" />
+            <span className="text-[10px] text-slate-400 font-semibold">H</span>
+            <button
+              type="button"
+              onClick={() => applyHorizontalZoom(1 / 1.5)}
+              className="p-0.5 rounded hover:bg-slate-800 text-slate-300"
+              title="Reduzir zoom horizontal (Ctrl+Scroll ↓)"
+            >
+              <ZoomOut className="w-3.5 h-3.5" />
+            </button>
+            <span className="font-mono text-[11px] font-bold text-sky-300 w-9 text-center">
+              {zoomH.toFixed(1)}×
+            </span>
+            <button
+              type="button"
+              onClick={() => applyHorizontalZoom(1.5)}
+              className="p-0.5 rounded hover:bg-slate-800 text-slate-300"
+              title="Aumentar zoom horizontal (Ctrl+Scroll ↑)"
+            >
+              <ZoomIn className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
+          {/* Zoom Vertical */}
+          <div
+            ref={vZoomBadgeRef}
+            className="flex items-center gap-1 bg-slate-900 border border-slate-800 rounded-lg px-1.5 py-0.5"
+            title="Zoom Vertical (Altura & Ganho da Onda) — Shift+Scroll ou Alt+Scroll no waveform, ou role o mouse aqui"
           >
-            <ZoomIn className="w-3.5 h-3.5" />
-          </button>
+            <MoveVertical className="w-3.5 h-3.5 text-violet-400" />
+            <span className="text-[10px] text-slate-400 font-semibold">V</span>
+            <button
+              type="button"
+              onClick={() => applyVerticalZoom(1 / 1.25)}
+              className="p-0.5 rounded hover:bg-slate-800 text-slate-300"
+              title="Reduzir zoom vertical (Shift/Alt+Scroll ↓)"
+            >
+              <ZoomOut className="w-3.5 h-3.5" />
+            </button>
+            <span className="font-mono text-[11px] font-bold text-violet-300 w-9 text-center">
+              {zoomV.toFixed(1)}×
+            </span>
+            <button
+              type="button"
+              onClick={() => applyVerticalZoom(1.25)}
+              className="p-0.5 rounded hover:bg-slate-800 text-slate-300"
+              title="Aumentar zoom vertical (Shift/Alt+Scroll ↑)"
+            >
+              <ZoomIn className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
           <button
             type="button"
             onClick={() => {
               onZoomHChange(1);
               onZoomVChange(1);
               setViewStartSec(0);
+              flashHud('Zoom Waveform: 1.0× (Ajustado à tela)');
             }}
-            className="p-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300"
-            title="Ajustar à tela"
+            className="px-1.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 flex items-center gap-1 text-[10px] font-bold"
+            title="Resetar Zoom Horizontal e Vertical para 1.0×"
           >
-            <Maximize2 className="w-3.5 h-3.5" />
+            <Maximize2 className="w-3 h-3" />
+            <span>1:1</span>
           </button>
-
-          {viewMode !== 'spectrogram' && (
-            <div className="hidden xl:flex items-center gap-1 ml-2 pl-2 border-l border-slate-800">
-              <span className="text-[10px] text-slate-500">Ganho V:</span>
-              <input
-                type="range"
-                min={0.5}
-                max={3.5}
-                step={0.1}
-                value={zoomV}
-                onChange={(e) => onZoomVChange(parseFloat(e.target.value))}
-                className="w-16"
-                aria-label="Zoom vertical do waveform"
-              />
-            </div>
-          )}
         </div>
       </div>
 
@@ -727,10 +940,15 @@ export const WaveformCanvas: React.FC<WaveformCanvasProps> = ({
           onPointerUp={handlePointerUp}
           onPointerLeave={() => setHoverInfo(null)}
           onDoubleClick={(e) => onSeek(clientXToTime(e.clientX))}
-          onWheel={handleWheel}
           className="block w-full cursor-crosshair touch-none"
-          style={{ height: viewMode === 'split' ? 300 : 210 }}
+          style={{ height: canvasHeight }}
         />
+
+        {zoomHud && (
+          <div className="pointer-events-none absolute top-7 right-3 z-20 px-2.5 py-1 rounded-lg bg-slate-950/90 border border-sky-500/60 text-[11px] font-mono font-bold text-sky-300 shadow-lg">
+            {zoomHud}
+          </div>
+        )}
 
         {hoverInfo && (
           <div
@@ -745,9 +963,9 @@ export const WaveformCanvas: React.FC<WaveformCanvasProps> = ({
         )}
       </div>
 
-      {/* Horizontal Navigation Scrollbar when zoomed + Quick Marker Chips */}
+      {/* Horizontal Navigation Scrollbar + Quick Mouse Wheel Mode Selector + Quick Marker Chips */}
       <div className="px-3 py-1.5 bg-[#0B1120] border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-2 text-[11px]">
-        <div className="flex items-center gap-2 flex-1 min-w-[200px]">
+        <div className="flex items-center gap-2 flex-1 min-w-[220px]">
           {zoomH > 1.01 ? (
             <>
               <span className="text-slate-500 shrink-0">Navegar:</span>
@@ -758,7 +976,7 @@ export const WaveformCanvas: React.FC<WaveformCanvasProps> = ({
                 step={0.05}
                 value={clampedStart}
                 onChange={(e) => setViewStartSec(parseFloat(e.target.value))}
-                className="flex-1"
+                className="flex-1 accent-sky-400"
                 aria-label="Navegação temporal horizontal"
               />
               <span className="font-mono text-slate-400 shrink-0">
@@ -766,10 +984,53 @@ export const WaveformCanvas: React.FC<WaveformCanvasProps> = ({
               </span>
             </>
           ) : (
-            <span className="text-slate-500">
-              Dica: arraste no waveform para criar Loop A/B · clique para posicionar · Ctrl+Scroll para zoom.
+            <span className="text-slate-400">
+              <strong className="text-sky-300">Ctrl+Scroll</strong>: Zoom Horizontal ·{' '}
+              <strong className="text-violet-300">Shift/Alt+Scroll</strong>: Zoom Vertical · Arraste: Loop A/B · Clique: posicionar
             </span>
           )}
+        </div>
+
+        {/* Direct Scroll Mode Pills (allows zooming H or V with 1 hand using just the mouse wheel!) */}
+        <div className="flex items-center gap-1.5 shrink-0">
+          <span className="text-[10px] text-slate-500 hidden sm:inline">Scroll do Mouse:</span>
+          <div className="flex items-center bg-slate-900 border border-slate-800 rounded-lg p-0.5 text-[10px]">
+            {(
+              [
+                {
+                  id: 'auto',
+                  label: 'Auto',
+                  title: 'Ctrl+Scroll: Zoom H · Shift/Alt+Scroll: Zoom V · Scroll: Navegar',
+                },
+                {
+                  id: 'zoomH',
+                  label: 'Zoom H',
+                  title: 'Roda do mouse dá Zoom Horizontal direto no waveform',
+                },
+                {
+                  id: 'zoomV',
+                  label: 'Zoom V',
+                  title: 'Roda do mouse dá Zoom Vertical direto no waveform',
+                },
+              ] as const
+            ).map((opt) => (
+              <button
+                key={opt.id}
+                type="button"
+                onClick={() => setWheelMode(opt.id)}
+                title={opt.title}
+                className={`px-2 py-0.5 rounded font-semibold transition ${
+                  wheelMode === opt.id
+                    ? opt.id === 'zoomV'
+                      ? 'bg-violet-500 text-slate-950'
+                      : 'bg-sky-500 text-slate-950'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* Quick Marker Jump Chips */}
