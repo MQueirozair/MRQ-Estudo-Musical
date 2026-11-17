@@ -105,7 +105,7 @@ export interface KeyAnalysis {
 export interface ProjectData {
   id: string;
   name: string;
-  source_type?: 'audio' | 'youtube';
+  source_type?: 'audio' | 'youtube' | 'video';
   youtube_video_id?: string | null;
   youtube_url?: string | null;
   youtube_channel?: string;

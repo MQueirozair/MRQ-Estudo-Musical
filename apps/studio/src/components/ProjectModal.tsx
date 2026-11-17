@@ -183,7 +183,12 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
                         <div className="text-xs font-bold text-white truncate flex items-center gap-1.5">
                           {p.source_type === 'youtube' && (
                             <span className="px-1.5 py-0.5 rounded bg-rose-500/20 border border-rose-500/40 text-rose-300 text-[9px] font-bold uppercase shrink-0">
-                              YouTube
+                              {p.audio_file_path ? 'YouTube + DSP' : 'YouTube'}
+                            </span>
+                          )}
+                          {p.source_type === 'video' && (
+                            <span className="px-1.5 py-0.5 rounded bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-[9px] font-bold uppercase shrink-0">
+                              Vídeo DSP
                             </span>
                           )}
                           <span className="truncate">{p.name}</span>

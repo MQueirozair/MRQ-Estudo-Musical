@@ -4,6 +4,16 @@ Todas as mudanças relevantes no **MRQ Estudo Musical** serão documentadas nest
 
 O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e o projeto adota [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [1.0.2] - 2026-11-17
+
+### Adicionado
+- **Piano Roll & MIDI + Notas & Acordes desbloqueados em Projetos de Vídeo do YouTube**:
+  - Edição interativa de notas no Piano Roll (com síntese Web Audio e exportação `.mid`) e progressão de acordes com diagramas de violão/teclado sincronizados ao playhead do vídeo do YouTube (com exportação de Cifras `.txt` e Relatório `.pdf`).
+- **Modo Híbrido Vídeo YouTube + Áudio DSP/Stems Sincronizado (`POST /api/audio/import?project_id=...`)**:
+  - Botão **Vincular Áudio/Vídeo Local a este Projeto** e gravador integrado **Microfone / Interface de Áudio (WAV 16-bit PCM)** para anexar áudio diretamente ao projeto do YouTube — liberando **IA automática (BPM, Tom, Notas, Acordes)**, **Separação em 4 Stems**, **Waveform + Espectrograma FFT** e **Afinação ±12 st** sincronizados visualmente ao vídeo!
+- **Suporte Completo a Links Diretos de Vídeo (`POST /api/projects/video-url`) e Arquivos de Vídeo Locais (`.mp4`, `.webm`, `.mov`, `.mkv`, `.m4v`)**:
+  - Player de Vídeo HTML5 sincronizado quadro-a-quadro (`GET /api/projects/{id}/video` com HTTP Range 206) com áudio processado pelo motor C++17 DSP (Time Stretch, Pitch Shift ±12st, IA completa e Mixer de 4 Stems), incluindo proteção SSRF em URLs remotas.
+
 ## [1.0.1] - 2026-11-16
 
 ### Adicionado

@@ -11,7 +11,12 @@ class ProjectCreateRequest(BaseModel):
 
 
 class YouTubeProjectCreateRequest(BaseModel):
-    url: str = Field(min_length=5, max_length=500)
+    url: str = Field(min_length=5, max_length=1000)
+    name: Optional[str] = Field(default=None, max_length=140)
+
+
+class VideoUrlProjectCreateRequest(BaseModel):
+    url: str = Field(min_length=5, max_length=1000)
     name: Optional[str] = Field(default=None, max_length=140)
 
 

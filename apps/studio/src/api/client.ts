@@ -54,6 +54,12 @@ export const api = {
       body: JSON.stringify({ url, ...(name ? { name } : {}) }),
     }),
 
+  createVideoUrlProject: (url: string, name?: string) =>
+    apiJson<ProjectData>('/api/projects/video-url', {
+      method: 'POST',
+      body: JSON.stringify({ url, ...(name ? { name } : {}) }),
+    }),
+
   getProject: (id: string) => apiJson<ProjectData>(`/api/projects/${id}`),
 
   updateProject: (id: string, patch: Partial<ProjectData>) =>
@@ -86,6 +92,8 @@ export const api = {
 
   audioUrl: (projectId: string, speed: number, semitones: number, cents: number) =>
     `/api/projects/${projectId}/audio?speed=${speed.toFixed(4)}&semitones=${semitones}&cents=${cents}`,
+
+  videoUrl: (projectId: string) => `/api/projects/${projectId}/video`,
 
   stemAudioUrl: (projectId: string, stemKey: string, speed: number, semitones: number, cents: number) =>
     `/api/projects/${projectId}/stems/${stemKey}/audio?speed=${speed.toFixed(4)}&semitones=${semitones}&cents=${cents}`,

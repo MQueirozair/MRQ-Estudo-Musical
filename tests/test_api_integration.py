@@ -161,3 +161,126 @@ def test_youtube_study_project_api_formats_and_persistence(tmp_path: Path):
     assert len(loaded["loops"]) == 1
     assert len(loaded["markers"]) == 1
     assert loaded["manual_beats"] == [10.0, 10.68, 11.36]
+
+    # Pure YouTube project supports interactive Piano Roll & Chords + real MIDI / Cifras / PDF export!
+    rn = client.put(
+        f"/api/projects/{yt_id}/notes",
+        json={
+            "notes": [
+                {"pitch": 60, "note_name": "C4", "start_sec": 1.0, "duration_sec": 0.5, "velocity": 100, "confidence": 1.0, "role": "melody", "channel": 0, "edited": True},
+                {"pitch": 64, "note_name": "E4", "start_sec": 1.5, "duration_sec": 0.5, "velocity": 100, "confidence": 1.0, "role": "melody", "channel": 0, "edited": True},
+            ]
+        },
+    )
+    assert rn.status_code == 200
+    rc = client.put(
+        f"/api/projects/{yt_id}/chords",
+        json={
+            "chords": [
+                {"symbol": "C", "root": "C", "quality": "maj", "notes": ["C", "E", "G"], "start_sec": 0.0, "end_sec": 4.0, "confidence": 1.0, "edited": True},
+            ]
+        },
+    )
+    assert rc.status_code == 200
+    assert client.post(f"/api/projects/{yt_id}/export", json={"format": "mid"}).content[:4] == b"MThd"
+    assert client.post(f"/api/projects/{yt_id}/export", json={"format": "txt_chords"}).status_code == 200
+    assert client.post(f"/api/projects/{yt_id}/export", json={"format": "pdf"}).content[:5] == b"%PDF-"
+
+    # Hybrid YouTube + Attached Audio unlocks full AI Analysis, Pitch Shift, Waveform & 4-Stem Separation on the SAME project!
+    pcm = generate_study_song(sr=44100, bpm=120.0, bars=2)
+    wav_path = tmp_path / "attached_ref.wav"
+    encode_audio(pcm, 44100, wav_path, fmt="wav")
+    with open(wav_path, "rb") as f:
+        att = client.post(
+            f"/api/audio/import?project_id={yt_id}",
+            files=[("files", ("attached_ref.wav", f, "audio/wav"))],
+        )
+    assert att.status_code == 200
+    hybrid = client.get(f"/api/projects/{yt_id}").json()
+    assert hybrid["source_type"] == "youtube"
+    assert hybrid["youtube_video_id"] == "aNOyvBm9Gfw"
+    assert hybrid["audio_file_path"] is not None
+    assert len(hybrid["loops"]) == 1
+    assert len(hybrid["markers"]) == 1
+
+    # Now AI Analysis & 4-Stem Separation run natively on the Hybrid YouTube project!
+    ana = client.post(f"/api/projects/{yt_id}/analyze/full")
+    assert ana.status_code == 200 and ana.json()["notes"]["note_count"] > 0
+    sep = client.post(f"/api/projects/{yt_id}/stems/separate")
+    assert sep.status_code == 200 and "vocals" in sep.json()["stems"]
+
+
+def test_local_video_mp4_import_streaming_dsp_ai_stems_and_ssrf_guard(tmp_path: Path):
+    """Tests importing a real .mp4 video (video + audio), Range streaming, DSP/AI/Stems, and video-url SSRF guard."""
+    import av
+    import numpy as np
+
+    app = create_app(data_dir=tmp_path / "video_studio_data")
+    client = TestClient(app)
+
+    # Generate a real minimal MP4 video with a video stream + stereo AAC audio stream via PyAV
+    mp4_path = tmp_path / "aula_estudo.mp4"
+    pcm = generate_study_song(sr=44100, bpm=120.0, bars=2)
+    with av.open(str(mp4_path), mode="w", format="mp4") as container:
+        vstream = container.add_stream("mpeg4", rate=10)
+        vstream.width = 64
+        vstream.height = 64
+        vstream.pix_fmt = "yuv420p"
+        astream = container.add_stream("aac", rate=44100)
+        astream.layout = "stereo"
+
+        for _ in range(10):
+            img = np.zeros((64, 64, 3), dtype=np.uint8)
+            vframe = av.VideoFrame.from_ndarray(img, format="rgb24")
+            for pkt in vstream.encode(vframe):
+                container.mux(pkt)
+        for pkt in vstream.encode():
+            container.mux(pkt)
+
+        # Feed audio in 1024-sample stereo planar float frames
+        total_frames = pcm.shape[0]
+        pos = 0
+        while pos < total_frames:
+            chunk = pcm[pos : pos + 1024]
+            if chunk.shape[0] < 1024:
+                chunk = np.pad(chunk, ((0, 1024 - chunk.shape[0]), (0, 0)))
+            planar = np.ascontiguousarray(chunk.T, dtype=np.float32)
+            aframe = av.AudioFrame.from_ndarray(planar, format="fltp", layout="stereo")
+            aframe.sample_rate = 44100
+            for pkt in astream.encode(aframe):
+                container.mux(pkt)
+            pos += 1024
+        for pkt in astream.encode():
+            container.mux(pkt)
+
+    with open(mp4_path, "rb") as f:
+        imp = client.post("/api/audio/import", files=[("files", ("aula_estudo.mp4", f, "video/mp4"))])
+    assert imp.status_code == 200
+    vproj = imp.json()["imported"][0]
+    vid = vproj["id"]
+    assert vproj["source_type"] == "video"
+
+    # Stream video with HTTP Range 206
+    rv = client.get(f"/api/projects/{vid}/video", headers={"Range": "bytes=0-1023"})
+    assert rv.status_code == 206 and len(rv.content) == 1024
+
+    # DSP audio pitch-shift & time-stretch, AI analysis & 4-Stem separation all work on MP4 video!
+    ra = client.get(f"/api/projects/{vid}/audio?speed=0.75&semitones=-2&cents=0", headers={"Range": "bytes=0-1023"})
+    assert ra.status_code == 206 and ra.content[:4] == b"RIFF"
+    ana = client.post(f"/api/projects/{vid}/analyze/full")
+    assert ana.status_code == 200 and ana.json()["notes"]["note_count"] > 0
+    sep = client.post(f"/api/projects/{vid}/stems/separate")
+    assert sep.status_code == 200 and "bass" in sep.json()["stems"]
+
+    # Unified /api/projects/video-url routes YouTube cleanly and blocks SSRF loopback/private URLs
+    yt_via_unified = client.post(
+        "/api/projects/video-url",
+        json={"url": "https://youtu.be/aNOyvBm9Gfw", "name": "Via Video-URL"},
+    )
+    assert yt_via_unified.status_code == 200
+    assert yt_via_unified.json()["source_type"] == "youtube"
+
+    ssrf_local = client.post("/api/projects/video-url", json={"url": "http://127.0.0.1:8765/api/health"})
+    assert ssrf_local.status_code == 400
+    ssrf_priv = client.post("/api/projects/video-url", json={"url": "http://192.168.1.10/test.mp4"})
+    assert ssrf_priv.status_code == 400

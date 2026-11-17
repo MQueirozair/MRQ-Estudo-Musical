@@ -53,6 +53,7 @@ interface YouTubeStudyPlayerProps {
   markers: MarkerItem[];
   manualBeats: number[];
   onTimeUpdate: (sec: number) => void;
+  onSeekRequest?: (sec: number) => void;
   onDurationReady: (sec: number) => void;
   onPlayStateChange: (playing: boolean) => void;
   onPrecountTick: (remaining: number) => void;
@@ -60,6 +61,10 @@ interface YouTubeStudyPlayerProps {
   onSeekMarkerLoop: (marker: MarkerItem) => void;
   onOpenYouTubeModal: () => void;
   onOpenLocalAudio: () => void;
+  hasAttachedAudio?: boolean;
+  audioSourceMode?: 'youtube' | 'dsp';
+  onAudioSourceModeChange?: (mode: 'youtube' | 'dsp') => void;
+  onAttachAudioToVideo?: () => void;
 }
 
 declare global {
@@ -154,6 +159,7 @@ export const YouTubeStudyPlayer = forwardRef<YouTubeStudyPlayerHandle, YouTubeSt
       markers,
       manualBeats,
       onTimeUpdate,
+      onSeekRequest,
       onDurationReady,
       onPlayStateChange,
       onPrecountTick,
@@ -161,7 +167,15 @@ export const YouTubeStudyPlayer = forwardRef<YouTubeStudyPlayerHandle, YouTubeSt
       onSeekMarkerLoop,
       onOpenYouTubeModal,
       onOpenLocalAudio,
+      hasAttachedAudio = false,
+      audioSourceMode = 'youtube',
+      onAudioSourceModeChange,
+      onAttachAudioToVideo,
     } = props;
+
+    const isDspMaster = hasAttachedAudio && audioSourceMode === 'dsp';
+    const isDspMasterRef = useRef(isDspMaster);
+    isDspMasterRef.current = isDspMaster;
 
     const mountRef = useRef<HTMLDivElement | null>(null);
     const playerRef = useRef<any>(null);
@@ -296,6 +310,16 @@ export const YouTubeStudyPlayer = forwardRef<YouTubeStudyPlayerHandle, YouTubeSt
                 const dur = Number(ev.target.getDuration?.() || 0);
                 if (dur > 0) onDurationReady(dur);
 
+                if (isDspMasterRef.current) {
+                  // In hybrid DSP/Stems mode, MRQPlaybackEngine owns play state; keep YouTube muted
+                  try {
+                    ev.target.mute();
+                  } catch {
+                    // ignore
+                  }
+                  return;
+                }
+
                 if (ev.data === YTState.PLAYING) {
                   onPlayStateChange(true);
                   try {
@@ -374,21 +398,59 @@ export const YouTubeStudyPlayer = forwardRef<YouTubeStudyPlayerHandle, YouTubeSt
       }
     }, [speed, playerReady]);
 
-    // Sync volume / mute changes
+    // Sync volume / mute changes (always muted when Hybrid C++17 DSP/Stems drives audio)
     useEffect(() => {
       if (!playerReady || !playerRef.current) return;
       try {
         playerRef.current.setVolume(Math.round(Math.max(0, Math.min(1, volume)) * 100));
-        if (muted) playerRef.current.mute();
+        if (muted || isDspMaster) playerRef.current.mute();
         else playerRef.current.unMute();
       } catch {
         // ignore
       }
-    }, [volume, muted, playerReady]);
+    }, [volume, muted, isDspMaster, playerReady]);
 
-    // High-precision 60fps time polling & A→B Loop Engine
+    // When Hybrid C++17 DSP/Stems is master clock, keep muted YouTube video visually synced
     useEffect(() => {
-      if (!playerReady) return;
+      if (!playerReady || !playerRef.current || !isDspMaster) return;
+      const p = playerRef.current;
+      try {
+        p.mute();
+        const YTState = window.YT?.PlayerState;
+        const st = p.getPlayerState?.();
+        if (isPlaying) {
+          const ytTime = Number(p.getCurrentTime?.() || 0);
+          if (Math.abs(ytTime - currentTime) > 0.45) {
+            p.seekTo?.(currentTime, true);
+          }
+          if (YTState && st !== YTState.PLAYING && st !== YTState.BUFFERING) {
+            p.playVideo?.();
+          }
+        } else if (YTState && st === YTState.PLAYING) {
+          p.pauseVideo?.();
+        }
+      } catch {
+        // ignore
+      }
+    }, [isDspMaster, isPlaying, playerReady]);
+
+    // Sync seek jumps to muted YouTube player in hybrid DSP mode
+    useEffect(() => {
+      if (!playerReady || !playerRef.current || !isDspMaster) return;
+      try {
+        const ytTime = Number(playerRef.current.getCurrentTime?.() || 0);
+        const threshold = isPlaying ? 0.65 : 0.2;
+        if (Math.abs(ytTime - currentTime) > threshold) {
+          playerRef.current.seekTo?.(currentTime, true);
+        }
+      } catch {
+        // ignore
+      }
+    }, [currentTime, isDspMaster, isPlaying, playerReady]);
+
+    // High-precision 60fps time polling & A→B Loop Engine (only when YouTube is master clock)
+    useEffect(() => {
+      if (!playerReady || isDspMaster) return;
       let rafId = 0;
       const tick = () => {
         const p = playerRef.current;
@@ -571,8 +633,12 @@ export const YouTubeStudyPlayer = forwardRef<YouTubeStudyPlayerHandle, YouTubeSt
       const sec = clientXToSec(e.clientX);
       if (dragModeRef.current === 'create' && Math.abs(sec - dragAnchorSecRef.current) <= 0.2) {
         // Simple click => seek
-        playerRef.current?.seekTo?.(sec, true);
-        onTimeUpdate(sec);
+        if (onSeekRequest) {
+          onSeekRequest(sec);
+        } else {
+          playerRef.current?.seekTo?.(sec, true);
+          onTimeUpdate(sec);
+        }
       }
       dragModeRef.current = 'none';
     };
@@ -642,6 +708,47 @@ export const YouTubeStudyPlayer = forwardRef<YouTubeStudyPlayerHandle, YouTubeSt
                 </div>
               </div>
             </div>
+
+            {hasAttachedAudio && onAudioSourceModeChange ? (
+              <div className="flex items-center rounded-lg bg-slate-900 border border-slate-700 p-0.5 text-[11px]">
+                <button
+                  type="button"
+                  onClick={() => onAudioSourceModeChange('dsp')}
+                  className={`px-2 py-1 rounded-md font-bold transition ${
+                    audioSourceMode === 'dsp'
+                      ? 'bg-emerald-500 text-slate-950'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                  title="Usa o áudio vinculado processado pelo Motor DSP C++17 (Pitch, IA e 4 Stems) sincronizado ao vídeo"
+                >
+                  DSP / Stems
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onAudioSourceModeChange('youtube')}
+                  className={`px-2 py-1 rounded-md font-bold transition ${
+                    audioSourceMode === 'youtube'
+                      ? 'bg-rose-500 text-white'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                  title="Usa o áudio direto do Player Oficial do YouTube"
+                >
+                  YouTube
+                </button>
+              </div>
+            ) : (
+              onAttachAudioToVideo && (
+                <button
+                  type="button"
+                  onClick={onAttachAudioToVideo}
+                  className="px-2.5 py-1.5 rounded-lg bg-sky-600/20 hover:bg-sky-600/30 border border-sky-500/40 text-sky-200 text-xs font-semibold flex items-center gap-1.5 transition"
+                  title="Vincular arquivo de áudio/vídeo local a este projeto do YouTube para liberar IA, Pitch ±12st e 4 Stems sincronizados"
+                >
+                  <FolderOpen className="w-3.5 h-3.5 text-sky-400" />
+                  <span className="hidden sm:inline">Vincular Áudio (IA/Stems)</span>
+                </button>
+              )
+            )}
 
             <button
               type="button"
@@ -829,8 +936,11 @@ export const YouTubeStudyPlayer = forwardRef<YouTubeStudyPlayerHandle, YouTubeSt
                   type="button"
                   onPointerDown={(e) => e.stopPropagation()}
                   onClick={() => {
-                    playerRef.current?.seekTo?.(mk.time_sec, true);
-                    onTimeUpdate(mk.time_sec);
+                    if (onSeekRequest) onSeekRequest(mk.time_sec);
+                    else {
+                      playerRef.current?.seekTo?.(mk.time_sec, true);
+                      onTimeUpdate(mk.time_sec);
+                    }
                   }}
                   onDoubleClick={() => onSeekMarkerLoop(mk)}
                   style={{ left: `${pct}%` }}

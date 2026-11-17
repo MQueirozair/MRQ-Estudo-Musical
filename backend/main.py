@@ -6,12 +6,15 @@ and browser/live preview via clean relative `/api/*` endpoints.
 
 from __future__ import annotations
 
+import ipaddress
 import json
 import logging
+import mimetypes
 import multiprocessing
 import os
 import re
 import shutil
+import socket
 import sys
 import tempfile
 import threading
@@ -43,11 +46,16 @@ from backend.schemas import (
     ProjectCreateRequest,
     ProjectUpdateRequest,
     TapTempoRequest,
+    VideoUrlProjectCreateRequest,
     YouTubeProjectCreateRequest,
 )
 from core.audio_engine.audio_manager import AudioManager
 from core.audio_engine.bridge import get_dsp_engine
-from core.audio_engine.decoder import SUPPORTED_IMPORT_EXTENSIONS, encode_audio
+from core.audio_engine.decoder import (
+    SUPPORTED_IMPORT_EXTENSIONS,
+    SUPPORTED_VIDEO_EXTENSIONS,
+    encode_audio,
+)
 from core.audio_engine.exporter import ProjectExporter
 from database.repository import ProjectRepository
 from plugins import registry as plugin_registry
@@ -216,34 +224,26 @@ def create_app(data_dir: Optional[str | Path] = None) -> FastAPI:
     def create_project(req: ProjectCreateRequest) -> Dict[str, Any]:
         return repo.create_project(req.name)
 
-    @app.post("/api/projects/youtube")
-    def create_youtube_project(req: YouTubeProjectCreateRequest) -> Dict[str, Any]:
-        """Creates a study project backed by the official embedded YouTube IFrame Player (no unauthorized downloading)."""
-        raw = req.url.strip()
-        video_id: Optional[str] = None
-        if re.fullmatch(r"[A-Za-z0-9_-]{11}", raw):
-            video_id = raw
-        else:
-            patterns = [
-                r"(?:youtube\.com/watch\?.*v=)([A-Za-z0-9_-]{11})",
-                r"(?:youtu\.be/)([A-Za-z0-9_-]{11})",
-                r"(?:youtube\.com/embed/)([A-Za-z0-9_-]{11})",
-                r"(?:youtube\.com/shorts/)([A-Za-z0-9_-]{11})",
-                r"(?:youtube\.com/live/)([A-Za-z0-9_-]{11})",
-            ]
-            for pat in patterns:
-                m = re.search(pat, raw)
-                if m:
-                    video_id = m.group(1)
-                    break
-        if not video_id:
-            raise HTTPException(
-                status_code=400,
-                detail="Link do YouTube inválido. Cole uma URL como https://www.youtube.com/watch?v=... ou https://youtu.be/...",
-            )
+    def _extract_youtube_video_id(raw: str) -> Optional[str]:
+        s = raw.strip()
+        if re.fullmatch(r"[A-Za-z0-9_-]{11}", s):
+            return s
+        patterns = [
+            r"(?:youtube\.com/watch\?.*v=)([A-Za-z0-9_-]{11})",
+            r"(?:youtu\.be/)([A-Za-z0-9_-]{11})",
+            r"(?:youtube\.com/embed/)([A-Za-z0-9_-]{11})",
+            r"(?:youtube\.com/shorts/)([A-Za-z0-9_-]{11})",
+            r"(?:youtube\.com/live/)([A-Za-z0-9_-]{11})",
+        ]
+        for pat in patterns:
+            m = re.search(pat, s)
+            if m:
+                return m.group(1)
+        return None
 
+    def _create_youtube_project_internal(video_id: str, custom_name: Optional[str]) -> Dict[str, Any]:
         canonical_url = f"https://www.youtube.com/watch?v={video_id}"
-        title = req.name.strip() if req.name and req.name.strip() else f"YouTube {video_id}"
+        title = custom_name.strip() if custom_name and custom_name.strip() else f"YouTube {video_id}"
         channel = ""
 
         # Optional public oEmbed metadata fetch (no media download)
@@ -256,7 +256,7 @@ def create_app(data_dir: Optional[str | Path] = None) -> FastAPI:
             r = urllib.request.Request(oembed_url, headers={"User-Agent": "MRQ-Estudo-Musical/1.0"})
             with urllib.request.urlopen(r, timeout=3.5) as resp:
                 meta_json = json.loads(resp.read().decode("utf-8"))
-                if not req.name and meta_json.get("title"):
+                if not custom_name and meta_json.get("title"):
                     title = str(meta_json["title"])[:130]
                 if meta_json.get("author_name"):
                     channel = str(meta_json["author_name"])[:80]
@@ -276,6 +276,123 @@ def create_app(data_dir: Optional[str | Path] = None) -> FastAPI:
                 "duration_sec": 0.0,
             },
         )
+
+    def _validate_public_media_url(url: str) -> urllib.parse.ParseResult:
+        parsed = urllib.parse.urlparse(url.strip())
+        if parsed.scheme not in ("http", "https") or not parsed.hostname:
+            raise HTTPException(status_code=400, detail="URL inválida. Use um link http:// ou https://.")
+        host = parsed.hostname.lower()
+        if host in ("localhost", "127.0.0.1", "::1", "0.0.0.0"):
+            raise HTTPException(status_code=400, detail="Endereços locais não são permitidos em links externos.")
+        try:
+            infos = socket.getaddrinfo(host, parsed.port or (443 if parsed.scheme == "https" else 80))
+            for info in infos:
+                ip = ipaddress.ip_address(info[4][0])
+                if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="Endereço de rede privada/interna bloqueado por segurança.",
+                    )
+        except HTTPException:
+            raise
+        except Exception:
+            raise HTTPException(status_code=400, detail="Não foi possível resolver o endereço informado.")
+        return parsed
+
+    @app.post("/api/projects/youtube")
+    def create_youtube_project(req: YouTubeProjectCreateRequest) -> Dict[str, Any]:
+        """Creates a study project backed by the official embedded YouTube IFrame Player (no unauthorized downloading)."""
+        video_id = _extract_youtube_video_id(req.url)
+        if not video_id:
+            raise HTTPException(
+                status_code=400,
+                detail="Link do YouTube inválido. Cole uma URL como https://www.youtube.com/watch?v=... ou https://youtu.be/...",
+            )
+        return _create_youtube_project_internal(video_id, req.name)
+
+    @app.post("/api/projects/video-url")
+    def create_video_url_project(req: VideoUrlProjectCreateRequest) -> Dict[str, Any]:
+        """
+        Smart video/media URL opener:
+        - YouTube URL -> Official YouTube IFrame Player API project (no unauthorized YouTube download).
+        - Direct video/audio file URL (.mp4, .webm, .mov, .mp3, .wav, .flac, .ogg, .m4a) -> imports locally via FFmpeg/PyAV
+          for full C++17 DSP, Pitch Shift, AI Notes/Chords, Piano Roll & 4-Stem Separation.
+        """
+        raw = req.url.strip()
+        yt_id = _extract_youtube_video_id(raw)
+        if yt_id:
+            return _create_youtube_project_internal(yt_id, req.name)
+
+        parsed = _validate_public_media_url(raw)
+        url_filename = Path(urllib.parse.unquote(parsed.path)).name or "video_link"
+        ext = Path(url_filename).suffix.lower()
+
+        max_bytes = 150 * 1024 * 1024  # 150 MB safety cap
+        req_http = urllib.request.Request(raw, headers={"User-Agent": "MRQ-Estudo-Musical/1.0"})
+        tmp_path: Optional[Path] = None
+        try:
+            with urllib.request.urlopen(req_http, timeout=20.0) as resp:
+                ctype = (resp.headers.get("Content-Type") or "").split(";")[0].strip().lower()
+                if ext not in SUPPORTED_IMPORT_EXTENSIONS:
+                    guessed = mimetypes.guess_extension(ctype) or ""
+                    if guessed == ".mpga":
+                        guessed = ".mp3"
+                    if guessed in SUPPORTED_IMPORT_EXTENSIONS:
+                        ext = guessed
+                        url_filename = f"{Path(url_filename).stem or 'media'}{ext}"
+                    elif ctype.startswith("video/mp4"):
+                        ext = ".mp4"
+                        url_filename = f"{Path(url_filename).stem or 'video'}.mp4"
+                    elif ctype.startswith("video/webm"):
+                        ext = ".webm"
+                        url_filename = f"{Path(url_filename).stem or 'video'}.webm"
+                    elif ctype.startswith("audio/mpeg"):
+                        ext = ".mp3"
+                        url_filename = f"{Path(url_filename).stem or 'audio'}.mp3"
+                    else:
+                        raise HTTPException(
+                            status_code=400,
+                            detail=(
+                                "O link informado não aponta para um vídeo/áudio direto suportado "
+                                "(MP4, WebM, MOV, MP3, WAV, FLAC, M4A, OGG) nem para um vídeo do YouTube."
+                            ),
+                        )
+
+                with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as tmp:
+                    total = 0
+                    while True:
+                        chunk = resp.read(256 * 1024)
+                        if not chunk:
+                            break
+                        total += len(chunk)
+                        if total > max_bytes:
+                            raise HTTPException(
+                                status_code=413,
+                                detail="Arquivo de vídeo/áudio remoto excede o limite de 150 MB.",
+                            )
+                        tmp.write(chunk)
+                    tmp_path = Path(tmp.name)
+
+            meta = audio_mgr.import_file(tmp_path, original_filename=url_filename)
+            is_video = ext in SUPPORTED_VIDEO_EXTENSIONS
+            meta_dict = meta.to_dict()
+            meta_dict["source_type"] = "video" if is_video else "audio"
+            meta_dict["youtube_url"] = raw
+            title = (req.name or "").strip() or Path(url_filename).stem or "Vídeo Online"
+            return repo.create_project(title, meta_dict)
+        except HTTPException:
+            raise
+        except Exception as exc:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Não foi possível carregar o link direto de mídia: {exc}",
+            )
+        finally:
+            if tmp_path and tmp_path.exists():
+                try:
+                    tmp_path.unlink()
+                except OSError:
+                    pass
 
     @app.get("/api/projects/{project_id}")
     def get_project(project_id: str) -> Dict[str, Any]:
@@ -369,7 +486,10 @@ def create_app(data_dir: Optional[str | Path] = None) -> FastAPI:
                     },
                 )
             else:
-                proj = repo.create_project(Path(filename).stem, meta.to_dict())
+                meta_dict = meta.to_dict()
+                if ext in SUPPORTED_VIDEO_EXTENSIONS:
+                    meta_dict["source_type"] = "video"
+                proj = repo.create_project(Path(filename).stem, meta_dict)
             imported_projects.append(proj)
 
         return {"imported": imported_projects, "count": len(imported_projects)}
@@ -445,6 +565,24 @@ def create_app(data_dir: Optional[str | Path] = None) -> FastAPI:
             output_format="wav",
         )
         return _stream_file_with_range(rendered, request, "audio/wav")
+
+    @app.get("/api/projects/{project_id}/video")
+    def stream_project_video(project_id: str, request: Request):
+        """Streams local or direct-URL imported video (MP4/WebM/MOV/MKV/M4V) with HTTP Range seeking."""
+        proj = repo.get_project(project_id)
+        if not proj or not proj.get("audio_file_path"):
+            raise HTTPException(status_code=404, detail="Projeto sem vídeo carregado")
+        video_path = Path(proj["audio_file_path"])
+        if not video_path.exists() or video_path.suffix.lower() not in SUPPORTED_VIDEO_EXTENSIONS:
+            raise HTTPException(status_code=404, detail="Arquivo de vídeo não encontrado")
+        mime_map = {
+            ".mp4": "video/mp4",
+            ".m4v": "video/mp4",
+            ".webm": "video/webm",
+            ".mov": "video/quicktime",
+            ".mkv": "video/x-matroska",
+        }
+        return _stream_file_with_range(video_path, request, mime_map.get(video_path.suffix.lower(), "video/mp4"))
 
     @app.get("/api/projects/{project_id}/waveform")
     def get_waveform(project_id: str, bins: int = Query(default=2400, ge=128, le=12000)) -> Dict[str, Any]:

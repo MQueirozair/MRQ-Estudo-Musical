@@ -219,20 +219,20 @@ export const TopMenuBar: React.FC<TopMenuBarProps> = (props) => {
             type="button"
             onClick={props.onOpenYouTubeModal}
             className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold shadow shadow-rose-950/40 transition"
-            title="Colar link do YouTube para estudar vídeo com velocidade e Loop A→B"
+            title="Colar link do YouTube ou link direto de vídeo (.mp4, .webm, .mov)"
           >
             <Youtube className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Link YouTube</span>
+            <span className="hidden sm:inline">Link Vídeo / YT</span>
           </button>
 
           <button
             type="button"
             onClick={props.onImportClick}
             className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-100 text-xs font-medium border border-slate-700 transition"
-            title="Importar MP3, WAV, M4A, FLAC, AAC, OGG ou AIFF"
+            title="Importar Áudio (MP3, WAV, M4A, FLAC, AAC, OGG, AIFF) ou Vídeo (MP4, WebM, MOV, MKV)"
           >
             <Upload className="w-3.5 h-3.5 text-sky-400" />
-            <span className="hidden sm:inline">Importar Áudio</span>
+            <span className="hidden sm:inline">Áudio / Vídeo</span>
           </button>
 
           <button

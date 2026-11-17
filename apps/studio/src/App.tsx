@@ -10,7 +10,6 @@ import {
   CheckCircle2,
   X,
   Youtube,
-  FolderOpen,
 } from 'lucide-react';
 import { api } from './api/client';
 import { MRQPlaybackEngine } from './audio/playbackEngine';
@@ -31,6 +30,8 @@ import { TopMenuBar } from './components/TopMenuBar';
 import { TransportBar } from './components/TransportBar';
 import { WaveformCanvas } from './components/WaveformCanvas';
 import { YouTubeStudyPlayer, type YouTubeStudyPlayerHandle } from './components/YouTubeStudyPlayer';
+import { LocalVideoStage } from './components/LocalVideoStage';
+import { AttachAudioBanner } from './components/AttachAudioBanner';
 import { YouTubeModal } from './components/YouTubeModal';
 import { SpeedPitchPanel } from './components/SpeedPitchPanel';
 import { LoopPanel } from './components/LoopPanel';
@@ -50,12 +51,14 @@ interface HistorySnapshot {
 
 export default function App() {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const attachAudioInputRef = useRef<HTMLInputElement>(null);
   const engineRef = useRef<MRQPlaybackEngine | null>(null);
   const ytPlayerRef = useRef<YouTubeStudyPlayerHandle | null>(null);
   const tapTimesRef = useRef<number[]>([]);
 
   // Core Project State
   const [project, setProject] = useState<ProjectData | null>(null);
+  const [ytAudioSource, setYtAudioSource] = useState<'youtube' | 'dsp'>('youtube');
   const [waveform, setWaveform] = useState<WaveformData | null>(null);
   const [spectrogram, setSpectrogram] = useState<SpectrogramData | null>(null);
 
@@ -183,8 +186,14 @@ export default function App() {
         engineRef.current?.setOriginalDuration(p.duration_sec || 0);
 
         if (p.source_type === 'youtube') {
-          setWaveform(null);
-          setBottomTab((prev) => (prev === 'pianoroll' || prev === 'chords' || prev === 'stems' ? 'loops' : prev));
+          if (p.audio_file_path) {
+            setYtAudioSource('dsp');
+            const wf = await api.getWaveform(p.id, 2400);
+            setWaveform(wf);
+          } else {
+            setYtAudioSource('youtube');
+            setWaveform(null);
+          }
         } else if (p.audio_file_path) {
           const wf = await api.getWaveform(p.id, 2400);
           setWaveform(wf);
@@ -513,41 +522,96 @@ export default function App() {
   );
 
   const isYouTubeMode = project?.source_type === 'youtube' && Boolean(project?.youtube_video_id);
+  const isLocalVideoMode = project?.source_type === 'video' && Boolean(project?.audio_file_path);
+  const hasAudioTrack = Boolean(project?.audio_file_path);
+  const useYouTubeClock = isYouTubeMode && (!hasAudioTrack || ytAudioSource === 'youtube');
 
   const playbackToggle = useCallback(() => {
-    if (isYouTubeMode) ytPlayerRef.current?.togglePlay();
+    if (useYouTubeClock) ytPlayerRef.current?.togglePlay();
     else engineRef.current?.togglePlay();
-  }, [isYouTubeMode]);
+  }, [useYouTubeClock]);
 
   const playbackPlay = useCallback(() => {
-    if (isYouTubeMode) ytPlayerRef.current?.play();
+    if (useYouTubeClock) ytPlayerRef.current?.play();
     else engineRef.current?.play();
-  }, [isYouTubeMode]);
+  }, [useYouTubeClock]);
 
   const playbackStop = useCallback(() => {
-    if (isYouTubeMode) ytPlayerRef.current?.stop();
+    if (useYouTubeClock) ytPlayerRef.current?.stop();
     else engineRef.current?.stop();
-  }, [isYouTubeMode]);
+  }, [useYouTubeClock]);
 
   const playbackSeek = useCallback(
     (sec: number) => {
-      if (isYouTubeMode) ytPlayerRef.current?.seek(sec);
+      if (useYouTubeClock) ytPlayerRef.current?.seek(sec);
       else engineRef.current?.seek(sec);
     },
-    [isYouTubeMode]
+    [useYouTubeClock]
   );
 
-  // Open YouTube Video as a Study Project (official YouTube IFrame Player API)
-  const handleOpenYouTube = useCallback(
+  const handleSwitchYtAudioSource = useCallback(
+    (nextMode: 'youtube' | 'dsp') => {
+      if (nextMode === ytAudioSource) return;
+      engineRef.current?.pause();
+      ytPlayerRef.current?.pause();
+      setIsPlaying(false);
+      setYtAudioSource(nextMode);
+      if (nextMode === 'dsp') {
+        engineRef.current?.seek(currentTime);
+        showToast('info', 'Áudio roteado para o Motor DSP C++17 / 4 Stems (vídeo YouTube sincronizado).');
+      } else {
+        ytPlayerRef.current?.seek(currentTime);
+        showToast('info', 'Áudio roteado para o Player Oficial do YouTube.');
+      }
+    },
+    [ytAudioSource, currentTime, showToast]
+  );
+
+  // Attach local audio/video or microphone recording onto the CURRENT project (unlocks AI, Pitch & Stems on YouTube!)
+  const handleAttachAudioToProject = useCallback(
+    async (files: FileList | File[]) => {
+      if (!project?.id || !files || files.length === 0) return;
+      setIsBusy(true);
+      setBusyText('Vinculando áudio ao projeto...');
+      try {
+        const res = await api.importAudioFiles([Array.from(files)[0]], project.id);
+        if (res.imported.length > 0) {
+          await loadProject(project.id);
+          setYtAudioSource('dsp');
+          showToast(
+            'success',
+            'Áudio vinculado ao vídeo! IA, Piano Roll, Acordes, Pitch ±12st e 4 Stems desbloqueados em sincronia.'
+          );
+        }
+      } catch (err: any) {
+        showToast('error', err?.message || 'Erro ao vincular áudio ao projeto');
+      } finally {
+        setIsBusy(false);
+        setBusyText('');
+      }
+    },
+    [project?.id, loadProject, showToast]
+  );
+
+  // Open YouTube Video OR Direct Video/Audio URL (.mp4, .webm, .mov, .mp3, .wav...)
+  const handleOpenVideoUrl = useCallback(
     async (url: string, customName?: string) => {
       setIsBusy(true);
-      setBusyText('Abrindo vídeo do YouTube...');
+      setBusyText('Carregando link de vídeo...');
       try {
         engineRef.current?.stop();
-        const created = await api.createYouTubeProject(url, customName);
+        const created = await api.createVideoUrlProject(url, customName);
         await loadProject(created.id);
-        setBottomTab('loops');
-        showToast('success', `Vídeo do YouTube carregado: "${created.name}".`);
+        if (created.source_type === 'video') {
+          showToast(
+            'success',
+            `Vídeo "${created.name}" carregado com DSP C++17, Pitch ±12st, IA e 4 Stems desbloqueados!`
+          );
+        } else if (created.source_type === 'youtube') {
+          showToast('success', `Vídeo do YouTube carregado: "${created.name}".`);
+        } else {
+          showToast('success', `Áudio online carregado: "${created.name}".`);
+        }
       } finally {
         setIsBusy(false);
         setBusyText('');
@@ -732,12 +796,12 @@ export default function App() {
         }
       }}
     >
-      {/* Hidden Multi-file Audio Input */}
+      {/* Hidden Multi-file Audio & Video Input */}
       <input
         ref={fileInputRef}
         type="file"
         multiple
-        accept=".mp3,.wav,.m4a,.flac,.aac,.ogg,.aiff,.aif,audio/*"
+        accept=".mp3,.wav,.m4a,.flac,.aac,.ogg,.aiff,.aif,.mp4,.webm,.mov,.mkv,.m4v,audio/*,video/*"
         className="hidden"
         onChange={(e) => {
           if (e.target.files?.length) {
@@ -747,12 +811,28 @@ export default function App() {
         }}
       />
 
+      {/* Hidden Single-file Input to Attach Audio/Video onto CURRENT Project (Hybrid YouTube + DSP/Stems) */}
+      <input
+        ref={attachAudioInputRef}
+        type="file"
+        accept=".mp3,.wav,.m4a,.flac,.aac,.ogg,.aiff,.aif,.mp4,.webm,.mov,.mkv,.m4v,audio/*,video/*"
+        className="hidden"
+        onChange={(e) => {
+          if (e.target.files?.length) {
+            void handleAttachAudioToProject(e.target.files);
+            e.target.value = '';
+          }
+        }}
+      />
+
       {/* Full-window Drag & Drop Overlay */}
       {dragOver && (
         <div className="fixed inset-0 z-50 bg-sky-950/80 backdrop-blur-sm border-4 border-dashed border-sky-400 flex flex-col items-center justify-center gap-3 pointer-events-none">
           <Upload className="w-12 h-12 text-sky-300 animate-bounce" />
-          <div className="text-xl font-extrabold text-white">Solte seus arquivos de áudio aqui</div>
-          <div className="text-xs text-sky-200">MP3 · WAV · M4A · FLAC · AAC · OGG · AIFF (suporta múltiplos arquivos)</div>
+          <div className="text-xl font-extrabold text-white">Solte seus arquivos de áudio ou vídeo aqui</div>
+          <div className="text-xs text-sky-200">
+            MP3 · WAV · M4A · FLAC · AAC · OGG · AIFF · MP4 · WebM · MOV · MKV
+          </div>
         </div>
       )}
 
@@ -901,8 +981,8 @@ export default function App() {
           </div>
         )}
 
-        {/* 2. CENTRAL STAGE: OFFICIAL YOUTUBE STUDY PLAYER OR WAVEFORM/SPECTROGRAM */}
-        {isYouTubeMode && project?.youtube_video_id ? (
+        {/* 2. CENTRAL STAGE: YOUTUBE PLAYER, LOCAL/DIRECT VIDEO PLAYER, AND/OR WAVEFORM + SPECTROGRAM */}
+        {isYouTubeMode && project?.youtube_video_id && (
           <YouTubeStudyPlayer
             ref={ytPlayerRef}
             videoId={project.youtube_video_id}
@@ -923,7 +1003,12 @@ export default function App() {
             precountSec={precountSec}
             markers={project.markers || []}
             manualBeats={project.manual_beats || []}
+            hasAttachedAudio={hasAudioTrack}
+            audioSourceMode={ytAudioSource}
+            onAudioSourceModeChange={handleSwitchYtAudioSource}
+            onAttachAudioToVideo={() => attachAudioInputRef.current?.click()}
             onTimeUpdate={setCurrentTime}
+            onSeekRequest={playbackSeek}
             onDurationReady={handleYouTubeDurationReady}
             onPlayStateChange={setIsPlaying}
             onPrecountTick={setPrecountRemaining}
@@ -936,7 +1021,25 @@ export default function App() {
             onOpenYouTubeModal={() => setYoutubeModalOpen(true)}
             onOpenLocalAudio={() => fileInputRef.current?.click()}
           />
-        ) : (
+        )}
+
+        {isLocalVideoMode && project && (
+          <LocalVideoStage
+            videoUrl={api.videoUrl(project.id)}
+            title={project.name}
+            sourceUrl={project.youtube_url}
+            duration={project.duration_sec || 0}
+            bpm={project.bpm}
+            musicalKey={project.musical_key}
+            currentTime={currentTime}
+            isPlaying={isPlaying}
+            speed={speed}
+            onOpenVideoModal={() => setYoutubeModalOpen(true)}
+            onOpenLocalFile={() => fileInputRef.current?.click()}
+          />
+        )}
+
+        {(!isYouTubeMode || hasAudioTrack) && (
           <WaveformCanvas
             waveform={waveform}
             spectrogram={spectrogram}
@@ -1023,8 +1126,10 @@ export default function App() {
           octaves={octaves}
           cents={cents}
           processingAudio={processingAudio}
-          isYouTubeMode={isYouTubeMode}
-          onOpenLocalAudio={() => fileInputRef.current?.click()}
+          isYouTubeMode={useYouTubeClock}
+          onOpenLocalAudio={() =>
+            isYouTubeMode ? attachAudioInputRef.current?.click() : fileInputRef.current?.click()
+          }
           onSpeedChange={(spd) => {
             setSpeed(spd);
             void saveProjectParams({ speed: spd });
@@ -1079,78 +1184,83 @@ export default function App() {
           </div>
 
           <div className="p-3.5">
-            {isYouTubeMode && (bottomTab === 'pianoroll' || bottomTab === 'chords' || bottomTab === 'stems') && (
-              <div className="rounded-xl bg-slate-950/80 border border-slate-800 p-6 flex flex-col items-center text-center gap-3">
-                <FolderOpen className="w-8 h-8 text-sky-400" />
-                <h3 className="text-sm font-bold text-white">
-                  Análise por IA, Piano Roll, Acordes e Stems disponíveis para Áudio Local
-                </h3>
-                <p className="text-xs text-slate-400 max-w-xl leading-relaxed">
-                  No modo YouTube utilizamos o <strong>Player Oficial incorporado</strong> (sem download não
-                  autorizado de áudio). Você já pode usar <strong>Loops A/B salvos</strong>,{' '}
-                  <strong>Marcadores (M)</strong>, <strong>Batidas (B)</strong>, velocidade 25%–200% e anotações de
-                  estudo. Para desbloquear transcrição polifônica (MIDI), reconhecimento de acordes e separação em 4
-                  stems, importe um arquivo de áudio local (MP3, WAV, FLAC, M4A, OGG).
-                </p>
-                <div className="flex flex-wrap items-center justify-center gap-2 mt-1">
-                  <button
-                    type="button"
-                    onClick={() => fileInputRef.current?.click()}
-                    className="px-4 py-2 rounded-lg bg-sky-600 hover:bg-sky-500 text-white text-xs font-bold flex items-center gap-1.5 transition"
-                  >
-                    <Upload className="w-3.5 h-3.5" /> Importar Arquivo de Áudio Local
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setBottomTab('loops')}
-                    className="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1.5 transition"
-                  >
-                    <Repeat className="w-3.5 h-3.5 text-amber-400" /> Ver Loops Salvos ({project?.loops.length || 0})
-                  </button>
-                </div>
-              </div>
+            {bottomTab === 'pianoroll' && project && (
+              <>
+                {isYouTubeMode && !hasAudioTrack && (
+                  <AttachAudioBanner
+                    variant="compact"
+                    contextLabel="Piano Roll & MIDI sincronizado ao vídeo do YouTube"
+                    onAttachLocalAudio={() => attachAudioInputRef.current?.click()}
+                    onAttachRecordedFile={(f) => handleAttachAudioToProject([f])}
+                    onOpenDirectVideoModal={() => setYoutubeModalOpen(true)}
+                  />
+                )}
+                <PianoRoll
+                  notes={project.notes}
+                  duration={project.duration_sec || 60}
+                  currentTime={currentTime}
+                  bpm={project.bpm || 120}
+                  speed={speed}
+                  analysisMeta={project.analysis?.notes}
+                  onNotesChange={handleNotesChange}
+                  onExportMidi={() => void handleExportRun({ format: 'mid' }, `${project.name}.mid`)}
+                  onAnalyzeNotes={() => void runAnalysis('notes')}
+                  onSeek={playbackSeek}
+                />
+              </>
             )}
 
-            {!isYouTubeMode && bottomTab === 'pianoroll' && project && (
-              <PianoRoll
-                notes={project.notes}
-                duration={project.duration_sec}
-                currentTime={currentTime}
-                bpm={project.bpm || 120}
-                speed={speed}
-                analysisMeta={project.analysis?.notes}
-                onNotesChange={handleNotesChange}
-                onExportMidi={() => void handleExportRun({ format: 'mid' }, `${project.name}.mid`)}
-                onAnalyzeNotes={() => void runAnalysis('notes')}
-                onSeek={playbackSeek}
-              />
+            {bottomTab === 'chords' && project && (
+              <>
+                {isYouTubeMode && !hasAudioTrack && (
+                  <AttachAudioBanner
+                    variant="compact"
+                    contextLabel="Notas, Acordes e Diagramas de Violão/Teclado sincronizados ao vídeo"
+                    onAttachLocalAudio={() => attachAudioInputRef.current?.click()}
+                    onAttachRecordedFile={(f) => handleAttachAudioToProject([f])}
+                    onOpenDirectVideoModal={() => setYoutubeModalOpen(true)}
+                  />
+                )}
+                <ChordPanel
+                  chords={project.chords}
+                  currentTime={currentTime}
+                  duration={project.duration_sec || 60}
+                  analysisMeta={project.analysis?.chords}
+                  onChordsChange={handleChordsChange}
+                  onAnalyzeChords={() => void runAnalysis('chords')}
+                  onSeek={playbackSeek}
+                  onExportChordsTxt={() => void handleExportRun({ format: 'txt_chords' }, `${project.name}_cifras.txt`)}
+                />
+              </>
             )}
 
-            {!isYouTubeMode && bottomTab === 'chords' && project && (
-              <ChordPanel
-                chords={project.chords}
-                currentTime={currentTime}
-                duration={project.duration_sec}
-                analysisMeta={project.analysis?.chords}
-                onChordsChange={handleChordsChange}
-                onAnalyzeChords={() => void runAnalysis('chords')}
-                onSeek={playbackSeek}
-                onExportChordsTxt={() => void handleExportRun({ format: 'txt_chords' }, `${project.name}_cifras.txt`)}
-              />
-            )}
-
-            {!isYouTubeMode && bottomTab === 'stems' && project && (
-              <StemMixerPanel
-                stemsAnalysis={project.analysis?.stems}
-                mixer={stemMixer}
-                separating={separatingStems}
-                progressPct={stemProgress.pct}
-                progressMsg={stemProgress.msg}
-                onSeparate={() => void handleSeparateStems()}
-                onMixerChange={setStemMixer}
-                onExportStem={(k) => setExportModalState({ open: true, scope: 'stem', stemKey: k })}
-                onExportCombinedMix={() => setExportModalState({ open: true, scope: 'stems_mix' })}
-              />
+            {bottomTab === 'stems' && project && (
+              hasAudioTrack ? (
+                <StemMixerPanel
+                  stemsAnalysis={project.analysis?.stems}
+                  mixer={stemMixer}
+                  separating={separatingStems}
+                  progressPct={stemProgress.pct}
+                  progressMsg={stemProgress.msg}
+                  onSeparate={() => void handleSeparateStems()}
+                  onMixerChange={(nextMixer) => {
+                    setStemMixer(nextMixer);
+                    if (isYouTubeMode && nextMixer.enabled && ytAudioSource !== 'dsp') {
+                      handleSwitchYtAudioSource('dsp');
+                    }
+                  }}
+                  onExportStem={(k) => setExportModalState({ open: true, scope: 'stem', stemKey: k })}
+                  onExportCombinedMix={() => setExportModalState({ open: true, scope: 'stems_mix' })}
+                />
+              ) : (
+                <AttachAudioBanner
+                  variant="full"
+                  contextLabel="Separação de Stems (4 Faixas) & Análise IA para Vídeo"
+                  onAttachLocalAudio={() => attachAudioInputRef.current?.click()}
+                  onAttachRecordedFile={(f) => handleAttachAudioToProject([f])}
+                  onOpenDirectVideoModal={() => setYoutubeModalOpen(true)}
+                />
+              )
             )}
 
             {bottomTab === 'loops' && project && (
@@ -1184,7 +1294,7 @@ export default function App() {
                   setLoopB(lp.end_sec);
                   setLoopEnabled(true);
                   setSpeed(lp.speed || 1.0);
-                  if (!isYouTubeMode) {
+                  if (hasAudioTrack) {
                     setSemitones(lp.semitones || 0);
                     setOctaves(0);
                     setCents(lp.cents || 0);
@@ -1194,8 +1304,8 @@ export default function App() {
                   if (autoPlay) playbackPlay();
                 }}
                 onExportLoop={(a, b) => {
-                  if (isYouTubeMode) {
-                    showToast('info', 'Exportação de áudio requer um arquivo de áudio local.');
+                  if (!hasAudioTrack) {
+                    showToast('info', 'Vincule um áudio/vídeo local ou gravação ao projeto para exportar o trecho de áudio.');
                     return;
                   }
                   setLoopA(a);
@@ -1222,15 +1332,15 @@ export default function App() {
                 onSeek={playbackSeek}
                 onLoopSection={handleLoopFromMarker}
                 onAnalyzeBpm={() => {
-                  if (isYouTubeMode) {
-                    showToast('info', 'Use a tecla B ou o botão Tap para medir o BPM em vídeos do YouTube.');
+                  if (!hasAudioTrack) {
+                    showToast('info', 'Use a tecla B / Tap ou vincule um áudio/vídeo ao projeto para detecção automática de BPM.');
                     return;
                   }
                   void runAnalysis('bpm');
                 }}
                 onAnalyzeKey={() => {
-                  if (isYouTubeMode) {
-                    showToast('info', 'Detecção automática de tonalidade requer arquivo de áudio local.');
+                  if (!hasAudioTrack) {
+                    showToast('info', 'Vincule um áudio/vídeo local ou gravação ao projeto para detectar a tonalidade automaticamente.');
                     return;
                   }
                   void runAnalysis('key');
@@ -1380,8 +1490,8 @@ export default function App() {
       <YouTubeModal
         open={youtubeModalOpen}
         onClose={() => setYoutubeModalOpen(false)}
-        onSubmitYouTube={handleOpenYouTube}
-        onChooseLocalAudio={() => fileInputRef.current?.click()}
+        onSubmitVideoUrl={handleOpenVideoUrl}
+        onChooseLocalMedia={() => fileInputRef.current?.click()}
       />
 
       <HelpModals tab={helpTab} onClose={() => setHelpTab(null)} onChangeTab={(t) => setHelpTab(t)} />

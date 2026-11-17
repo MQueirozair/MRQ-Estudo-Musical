@@ -142,7 +142,7 @@ export const SpeedPitchPanel: React.FC<SpeedPitchPanelProps> = ({
             </p>
             <div className="flex flex-wrap items-center justify-between gap-2">
               <span className="text-[11px] text-slate-400">
-                Quer transpor em semitons (±12 st), ver Espectrograma FFT ou usar IA/Stems?
+                Vincule um áudio/vídeo a este projeto para liberar Pitch ±12 st, IA e 4 Stems sincronizados ao vídeo:
               </span>
               {onOpenLocalAudio && (
                 <button
@@ -151,7 +151,7 @@ export const SpeedPitchPanel: React.FC<SpeedPitchPanelProps> = ({
                   className="px-3 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-500 text-white text-xs font-semibold flex items-center gap-1.5 shrink-0 transition"
                 >
                   <FolderOpen className="w-3.5 h-3.5" />
-                  <span>Importar Áudio Local</span>
+                  <span>Vincular Áudio / Vídeo</span>
                 </button>
               )}
             </div>
