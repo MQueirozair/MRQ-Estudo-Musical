@@ -90,13 +90,24 @@ export const api = {
     });
   },
 
-  audioUrl: (projectId: string, speed: number, semitones: number, cents: number) =>
-    `/api/projects/${projectId}/audio?speed=${speed.toFixed(4)}&semitones=${semitones}&cents=${cents}`,
+  audioUrl: (projectId: string, speed: number, semitones: number, cents: number, cacheKey?: string) =>
+    `/api/projects/${projectId}/audio?speed=${speed.toFixed(4)}&semitones=${semitones}&cents=${cents}${
+      cacheKey ? `&v=${encodeURIComponent(cacheKey)}` : ''
+    }`,
 
   videoUrl: (projectId: string) => `/api/projects/${projectId}/video`,
 
-  stemAudioUrl: (projectId: string, stemKey: string, speed: number, semitones: number, cents: number) =>
-    `/api/projects/${projectId}/stems/${stemKey}/audio?speed=${speed.toFixed(4)}&semitones=${semitones}&cents=${cents}`,
+  stemAudioUrl: (
+    projectId: string,
+    stemKey: string,
+    speed: number,
+    semitones: number,
+    cents: number,
+    cacheKey?: string
+  ) =>
+    `/api/projects/${projectId}/stems/${stemKey}/audio?speed=${speed.toFixed(4)}&semitones=${semitones}&cents=${cents}${
+      cacheKey ? `&v=${encodeURIComponent(cacheKey)}` : ''
+    }`,
 
   getWaveform: (projectId: string, bins = 2400) =>
     apiJson<WaveformData>(`/api/projects/${projectId}/waveform?bins=${bins}`),

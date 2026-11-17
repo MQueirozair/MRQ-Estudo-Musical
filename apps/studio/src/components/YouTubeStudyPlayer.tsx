@@ -14,6 +14,7 @@ import {
   FolderOpen,
   Minus,
   Plus,
+  Radio,
   RefreshCw,
   Repeat,
   Youtube,
@@ -65,6 +66,7 @@ interface YouTubeStudyPlayerProps {
   audioSourceMode?: 'youtube' | 'dsp';
   onAudioSourceModeChange?: (mode: 'youtube' | 'dsp') => void;
   onAttachAudioToVideo?: () => void;
+  onOpenSystemCapture?: () => void;
 }
 
 declare global {
@@ -171,6 +173,7 @@ export const YouTubeStudyPlayer = forwardRef<YouTubeStudyPlayerHandle, YouTubeSt
       audioSourceMode = 'youtube',
       onAudioSourceModeChange,
       onAttachAudioToVideo,
+      onOpenSystemCapture,
     } = props;
 
     const isDspMaster = hasAttachedAudio && audioSourceMode === 'dsp';
@@ -745,9 +748,21 @@ export const YouTubeStudyPlayer = forwardRef<YouTubeStudyPlayerHandle, YouTubeSt
                   title="Vincular arquivo de áudio/vídeo local a este projeto do YouTube para liberar IA, Pitch ±12st e 4 Stems sincronizados"
                 >
                   <FolderOpen className="w-3.5 h-3.5 text-sky-400" />
-                  <span className="hidden sm:inline">Vincular Áudio (IA/Stems)</span>
+                  <span className="hidden sm:inline">Vincular Arquivo</span>
                 </button>
               )
+            )}
+
+            {onOpenSystemCapture && (
+              <button
+                type="button"
+                onClick={onOpenSystemCapture}
+                className="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-1.5 shadow transition"
+                title="Capturar o Som do Sistema (saída estéreo do computador) para gerar Forma de Onda, IA, 4 Stems e exportar MP3/WAV/FLAC"
+              >
+                <Radio className="w-3.5 h-3.5" />
+                <span>{hasAttachedAudio ? 'Recapturar Som' : 'Capturar Som do Sistema'}</span>
+              </button>
             )}
 
             <button

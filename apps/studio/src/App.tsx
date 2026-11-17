@@ -10,6 +10,7 @@ import {
   CheckCircle2,
   X,
   Youtube,
+  Radio,
 } from 'lucide-react';
 import { api } from './api/client';
 import { MRQPlaybackEngine } from './audio/playbackEngine';
@@ -32,6 +33,7 @@ import { WaveformCanvas } from './components/WaveformCanvas';
 import { YouTubeStudyPlayer, type YouTubeStudyPlayerHandle } from './components/YouTubeStudyPlayer';
 import { LocalVideoStage } from './components/LocalVideoStage';
 import { AttachAudioBanner } from './components/AttachAudioBanner';
+import { SystemAudioCaptureBar } from './components/SystemAudioCaptureBar';
 import { YouTubeModal } from './components/YouTubeModal';
 import { SpeedPitchPanel } from './components/SpeedPitchPanel';
 import { LoopPanel } from './components/LoopPanel';
@@ -52,6 +54,7 @@ interface HistorySnapshot {
 export default function App() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const attachAudioInputRef = useRef<HTMLInputElement>(null);
+  const captureBarRef = useRef<HTMLDivElement>(null);
   const engineRef = useRef<MRQPlaybackEngine | null>(null);
   const ytPlayerRef = useRef<YouTubeStudyPlayerHandle | null>(null);
   const tapTimesRef = useRef<number[]>([]);
@@ -110,9 +113,10 @@ export default function App() {
   const [autosaveLabel, setAutosaveLabel] = useState('Salvo');
   const [toast, setToast] = useState<{ kind: 'info' | 'error' | 'success'; msg: string } | null>(null);
 
-  // Modals
+  // Modals & Docked Tools
   const [projectsModalOpen, setProjectsModalOpen] = useState(false);
   const [youtubeModalOpen, setYoutubeModalOpen] = useState(false);
+  const [captureBarOpen, setCaptureBarOpen] = useState(false);
   const [exportModalState, setExportModalState] = useState<{
     open: boolean;
     scope: 'full' | 'loop' | 'stem' | 'stems_mix';
@@ -227,12 +231,13 @@ export default function App() {
     })();
   }, [loadProject, showToast]);
 
-  // Reload DSP-processed audio buffer whenever project, speed, semitones, octaves or cents change (debounced)
+  // Reload DSP-processed audio buffer whenever project, audio file, speed, semitones, octaves or cents change (debounced)
   const totalSemitones = semitones + octaves * 12;
   useEffect(() => {
     if (!project?.id || !project.audio_file_path) return;
+    const rev = project.audio_file_path;
     const timer = window.setTimeout(() => {
-      const url = api.audioUrl(project.id, speed, totalSemitones, cents);
+      const url = api.audioUrl(project.id, speed, totalSemitones, cents, rev);
       void engineRef.current?.loadMainAudio(url, speed);
     }, 180);
     return () => window.clearTimeout(timer);
@@ -242,15 +247,16 @@ export default function App() {
   useEffect(() => {
     engineRef.current?.setStemMixer(stemMixer);
     if (!stemMixer.enabled || !project?.id || !project.analysis?.stems?.stems) return;
-    const cacheKey = `${project.id}|${speed}|${totalSemitones}|${cents}`;
+    const rev = project.audio_file_path || '';
+    const cacheKey = `${project.id}|${rev}|${speed}|${totalSemitones}|${cents}`;
     const urls: Record<StemKey, string> = {
-      vocals: api.stemAudioUrl(project.id, 'vocals', speed, totalSemitones, cents),
-      drums: api.stemAudioUrl(project.id, 'drums', speed, totalSemitones, cents),
-      bass: api.stemAudioUrl(project.id, 'bass', speed, totalSemitones, cents),
-      other: api.stemAudioUrl(project.id, 'other', speed, totalSemitones, cents),
+      vocals: api.stemAudioUrl(project.id, 'vocals', speed, totalSemitones, cents, rev),
+      drums: api.stemAudioUrl(project.id, 'drums', speed, totalSemitones, cents, rev),
+      bass: api.stemAudioUrl(project.id, 'bass', speed, totalSemitones, cents, rev),
+      other: api.stemAudioUrl(project.id, 'other', speed, totalSemitones, cents, rev),
     };
     void engineRef.current?.loadStems(urls, speed, cacheKey);
-  }, [stemMixer, project?.id, project?.analysis?.stems, speed, totalSemitones, cents]);
+  }, [stemMixer, project?.id, project?.audio_file_path, project?.analysis?.stems, speed, totalSemitones, cents]);
 
   // Keep engine synced with Loop, Precount and Volume
   useEffect(() => {
@@ -570,7 +576,42 @@ export default function App() {
     [ytAudioSource, currentTime, showToast]
   );
 
-  // Attach local audio/video or microphone recording onto the CURRENT project (unlocks AI, Pitch & Stems on YouTube!)
+  const openSystemCapture = useCallback(() => {
+    setCaptureBarOpen(true);
+    window.setTimeout(() => {
+      captureBarRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 60);
+  }, []);
+
+  // Attach captured system audio (WASAPI loopback / stereo input) to current project or create new project
+  const handleCapturedSystemAudio = useCallback(
+    async (file: File, meta: { durationSec: number; peakDb: number }) => {
+      setIsBusy(true);
+      setBusyText('Gerando forma de onda do som capturado...');
+      try {
+        const targetId = project?.id;
+        const res = await api.importAudioFiles([file], targetId);
+        if (res.imported.length > 0) {
+          const updatedId = res.imported[0].id;
+          await loadProject(updatedId);
+          setYtAudioSource('dsp');
+          showToast(
+            'success',
+            `Som capturado (${meta.durationSec.toFixed(1)}s · pico ${meta.peakDb.toFixed(1)} dB)! Forma de onda gerada — MP3/WAV/FLAC, IA, Pitch e 4 Stems desbloqueados!`
+          );
+        }
+      } catch (err: any) {
+        showToast('error', err?.message || 'Erro ao importar áudio capturado.');
+        throw err;
+      } finally {
+        setIsBusy(false);
+        setBusyText('');
+      }
+    },
+    [project?.id, loadProject, showToast]
+  );
+
+  // Attach local audio/video or recording onto the CURRENT project (unlocks AI, Pitch & Stems on YouTube!)
   const handleAttachAudioToProject = useCallback(
     async (files: FileList | File[]) => {
       if (!project?.id || !files || files.length === 0) return;
@@ -583,7 +624,7 @@ export default function App() {
           setYtAudioSource('dsp');
           showToast(
             'success',
-            'Áudio vinculado ao vídeo! IA, Piano Roll, Acordes, Pitch ±12st e 4 Stems desbloqueados em sincronia.'
+            'Áudio vinculado ao vídeo! Forma de onda, IA, Piano Roll, Acordes, Pitch ±12st e 4 Stems desbloqueados.'
           );
         }
       } catch (err: any) {
@@ -623,10 +664,10 @@ export default function App() {
     [loadProject, showToast]
   );
 
-  // Save real duration reported by YouTube IFrame Player once video loads
+  // Save real duration reported by YouTube IFrame Player once video loads (only when no local/captured audio defines duration)
   const handleYouTubeDurationReady = useCallback(
     (durSec: number) => {
-      if (!project || project.source_type !== 'youtube' || durSec <= 0) return;
+      if (!project || project.source_type !== 'youtube' || project.audio_file_path || durSec <= 0) return;
       if (Math.abs((project.duration_sec || 0) - durSec) < 0.8) return;
       setProject((prev) => (prev ? { ...prev, duration_sec: durSec } : prev));
       void api.updateProject(project.id, { duration_sec: Number(durSec.toFixed(2)) }).catch(() => {});
@@ -971,6 +1012,14 @@ export default function App() {
             <div className="flex items-center gap-2">
               <button
                 type="button"
+                onClick={openSystemCapture}
+                className="px-2.5 py-1 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/45 text-emerald-200 text-[11px] font-semibold flex items-center gap-1.5 transition"
+              >
+                <Radio className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Capturar Som do Sistema</span>
+              </button>
+              <button
+                type="button"
                 onClick={() => setYoutubeModalOpen(true)}
                 className="px-2.5 py-1 rounded-lg bg-rose-600/15 hover:bg-rose-600/25 border border-rose-500/40 text-rose-200 text-[11px] font-semibold flex items-center gap-1.5 transition"
               >
@@ -1010,6 +1059,7 @@ export default function App() {
             audioSourceMode={ytAudioSource}
             onAudioSourceModeChange={handleSwitchYtAudioSource}
             onAttachAudioToVideo={() => attachAudioInputRef.current?.click()}
+            onOpenSystemCapture={openSystemCapture}
             onTimeUpdate={setCurrentTime}
             onSeekRequest={playbackSeek}
             onDurationReady={handleYouTubeDurationReady}
@@ -1025,6 +1075,15 @@ export default function App() {
             onOpenLocalAudio={() => fileInputRef.current?.click()}
           />
         )}
+
+        {/* DOCKED SYSTEM AUDIO CAPTURE BAR (WASAPI Stereo Loopback + Selectable Device + Live VU Meter) */}
+        <div ref={captureBarRef}>
+          <SystemAudioCaptureBar
+            open={captureBarOpen}
+            onClose={() => setCaptureBarOpen(false)}
+            onCapturedFile={handleCapturedSystemAudio}
+          />
+        </div>
 
         {isLocalVideoMode && project && (
           <LocalVideoStage
@@ -1193,8 +1252,8 @@ export default function App() {
                   <AttachAudioBanner
                     variant="compact"
                     contextLabel="Piano Roll & MIDI sincronizado ao vídeo do YouTube"
+                    onOpenSystemCapture={openSystemCapture}
                     onAttachLocalAudio={() => attachAudioInputRef.current?.click()}
-                    onAttachRecordedFile={(f) => handleAttachAudioToProject([f])}
                     onOpenDirectVideoModal={() => setYoutubeModalOpen(true)}
                   />
                 )}
@@ -1219,8 +1278,8 @@ export default function App() {
                   <AttachAudioBanner
                     variant="compact"
                     contextLabel="Notas, Acordes e Diagramas de Violão/Teclado sincronizados ao vídeo"
+                    onOpenSystemCapture={openSystemCapture}
                     onAttachLocalAudio={() => attachAudioInputRef.current?.click()}
-                    onAttachRecordedFile={(f) => handleAttachAudioToProject([f])}
                     onOpenDirectVideoModal={() => setYoutubeModalOpen(true)}
                   />
                 )}
@@ -1259,8 +1318,8 @@ export default function App() {
                 <AttachAudioBanner
                   variant="full"
                   contextLabel="Separação de Stems (4 Faixas) & Análise IA para Vídeo"
+                  onOpenSystemCapture={openSystemCapture}
                   onAttachLocalAudio={() => attachAudioInputRef.current?.click()}
-                  onAttachRecordedFile={(f) => handleAttachAudioToProject([f])}
                   onOpenDirectVideoModal={() => setYoutubeModalOpen(true)}
                 />
               )
@@ -1485,6 +1544,7 @@ export default function App() {
           defaultStemKey={exportModalState.stemKey}
           onClose={() => setExportModalState((s) => ({ ...s, open: false }))}
           onAttachLocalAudio={() => attachAudioInputRef.current?.click()}
+          onOpenSystemCapture={openSystemCapture}
           onRunExport={handleExportRun}
         />
       )}

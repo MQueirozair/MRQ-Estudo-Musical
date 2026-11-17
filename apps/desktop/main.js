@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Menu, shell, dialog, session } = require('electron');
+const { app, BrowserWindow, Menu, shell, dialog, session, desktopCapturer } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const net = require('net');
@@ -256,6 +256,66 @@ function createWindow() {
 }
 
 app.whenReady().then(async () => {
+  // Grant local media & system audio capture permissions for the MRQ Studio window
+  try {
+    const isLocalOrigin = (url = '') =>
+      url.startsWith('http://127.0.0.1') || url.startsWith('http://localhost');
+
+    const generalPermissions = new Set([
+      'fullscreen',
+      'mediaKeySystem',
+      'speaker-selection',
+      'clipboard-read',
+      'clipboard-sanitized-write',
+    ]);
+    const localCapturePermissions = new Set(['media', 'audioCapture', 'display-capture']);
+
+    session.defaultSession.setPermissionRequestHandler((webContents, permission, callback, details) => {
+      if (generalPermissions.has(permission)) {
+        callback(true);
+        return;
+      }
+      if (localCapturePermissions.has(permission)) {
+        const reqUrl = (details && details.requestingUrl) || (webContents && webContents.getURL()) || '';
+        callback(isLocalOrigin(reqUrl));
+        return;
+      }
+      callback(false);
+    });
+
+    session.defaultSession.setPermissionCheckHandler((webContents, permission, requestingOrigin) => {
+      if (generalPermissions.has(permission)) return true;
+      if (localCapturePermissions.has(permission)) {
+        const origin = requestingOrigin || (webContents && webContents.getURL()) || '';
+        return isLocalOrigin(origin);
+      }
+      return false;
+    });
+
+    // Enable native System Audio Loopback (Windows WASAPI / macOS ScreenCaptureKit) via getDisplayMedia()
+    session.defaultSession.setDisplayMediaRequestHandler(
+      async (_request, callback) => {
+        try {
+          const sources = await desktopCapturer.getSources({
+            types: ['screen'],
+            thumbnailSize: { width: 1, height: 1 },
+          });
+          if (sources && sources.length > 0) {
+            callback({ video: sources[0], audio: 'loopback' });
+          } else {
+            callback({});
+          }
+        } catch (err) {
+          console.error('[MRQ] desktopCapturer loopback error:', err);
+          callback({});
+        }
+      },
+      { useSystemPicker: false }
+    );
+  } catch (err) {
+    console.error('[MRQ] permission/loopback setup warning:', err);
+  }
+
   // Ensure official YouTube IFrame Player embeds always receive a valid Referer header (prevents YT Error 153)
   try {
     session.defaultSession.webRequest.onBeforeSendHeaders(

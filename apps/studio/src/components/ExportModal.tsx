@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Download, FileAudio, FileText, FileMusic, FileCheck2, X, Loader2, Lock, Upload } from 'lucide-react';
+import { Download, FileAudio, FileText, FileMusic, FileCheck2, X, Loader2, Lock, Radio, Upload } from 'lucide-react';
 import type { ProjectData, StemKey, StemMixerState } from '../types/music';
 import { formatTime } from '../data/chordDiagrams';
 
@@ -17,6 +17,7 @@ interface ExportModalProps {
   defaultStemKey?: StemKey;
   onClose: () => void;
   onAttachLocalAudio?: () => void;
+  onOpenSystemCapture?: () => void;
   onRunExport: (payload: Record<string, any>, fallbackName: string) => Promise<void>;
 }
 
@@ -34,6 +35,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
   defaultStemKey = 'vocals',
   onClose,
   onAttachLocalAudio,
+  onOpenSystemCapture,
   onRunExport,
 }) => {
   const hasAudio = Boolean(project.audio_file_path);
@@ -131,26 +133,42 @@ export const ExportModal: React.FC<ExportModalProps> = ({
 
         <div className="p-4 space-y-4 max-h-[78vh] overflow-y-auto">
           {!hasAudio && (
-            <div className="rounded-xl bg-sky-950/50 border border-sky-500/35 p-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5">
+            <div className="rounded-xl bg-sky-950/50 border border-sky-500/35 p-3 space-y-2.5">
               <div className="text-[11px] text-slate-300 leading-relaxed">
                 <strong className="text-sky-300">Modo Vídeo YouTube:</strong> você já pode exportar{' '}
                 <strong>Relatório PDF</strong>, <strong>Cifras (TXT)</strong>, <strong>Notas (TXT)</strong> e{' '}
-                <strong>MIDI (.mid)</strong> agora mesmo. Para exportar <strong>MP3 / WAV / FLAC</strong> (o YouTube não
-                permite baixar áudio direto), vincule um áudio/vídeo local ao projeto.
+                <strong>MIDI (.mid)</strong> agora mesmo. Para converter e exportar{' '}
+                <strong>MP3 / WAV / FLAC</strong>, capture o <strong className="text-emerald-300">Som do Sistema (Saída Estéreo)</strong> ou
+                vincule um arquivo local:
               </div>
-              {onAttachLocalAudio && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    onClose();
-                    onAttachLocalAudio();
-                  }}
-                  className="px-3 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-500 text-white text-[11px] font-bold flex items-center gap-1.5 shrink-0 transition"
-                >
-                  <Upload className="w-3.5 h-3.5" />
-                  <span>Vincular Áudio</span>
-                </button>
-              )}
+              <div className="flex flex-wrap items-center gap-2">
+                {onOpenSystemCapture && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onClose();
+                      onOpenSystemCapture();
+                    }}
+                    className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold flex items-center gap-1.5 shadow transition"
+                  >
+                    <Radio className="w-3.5 h-3.5" />
+                    <span>Capturar Som do Sistema</span>
+                  </button>
+                )}
+                {onAttachLocalAudio && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onClose();
+                      onAttachLocalAudio();
+                    }}
+                    className="px-3 py-1.5 rounded-lg bg-sky-600/20 hover:bg-sky-600/30 border border-sky-500/40 text-sky-200 text-[11px] font-semibold flex items-center gap-1.5 transition"
+                  >
+                    <Upload className="w-3.5 h-3.5" />
+                    <span>Vincular Áudio Local</span>
+                  </button>
+                )}
+              </div>
             </div>
           )}
 

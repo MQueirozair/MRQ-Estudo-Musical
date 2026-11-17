@@ -284,3 +284,92 @@ def test_local_video_mp4_import_streaming_dsp_ai_stems_and_ssrf_guard(tmp_path: 
     assert ssrf_local.status_code == 400
     ssrf_priv = client.post("/api/projects/video-url", json={"url": "http://192.168.1.10/test.mp4"})
     assert ssrf_priv.status_code == 400
+
+
+def test_system_audio_capture_waveform_and_non_silent_conversion(tmp_path: Path):
+    """
+    Verifies the exact Windows WASAPI / System Audio Capture workflow:
+    1) Create YouTube study project.
+    2) Attach a captured stereo 48 kHz 16-bit PCM WAV (same binary format emitted by MRQAudioCaptureSession).
+    3) Confirm waveform peaks are non-flat (audible signal rendered).
+    4) Convert/export to MP3, WAV, and FLAC and verify EVERY output decodes with strong audible RMS (never silent/mute).
+    """
+    import struct
+    import numpy as np
+    from core.audio_engine.decoder import decode_audio
+
+    app = create_app(data_dir=tmp_path / "sys_capture_data")
+    client = TestClient(app)
+
+    yt = client.post(
+        "/api/projects/youtube",
+        json={"url": "https://www.youtube.com/watch?v=aNOyvBm9Gfw", "name": "Teste Captura Sistema"},
+    )
+    assert yt.status_code == 200
+    pid = yt.json()["id"]
+
+    # Build a stereo 48 kHz 16-bit PCM WAV identical to apps/studio/src/utils/audioCapture.ts encodeStereoWavBlob()
+    sr = 48000
+    dur = 2.0
+    n = int(sr * dur)
+    t = np.arange(n, dtype=np.float32) / sr
+    left = (0.55 * np.sin(2.0 * np.pi * 440.0 * t)).astype(np.float32)
+    right = (0.55 * np.sin(2.0 * np.pi * 554.37 * t)).astype(np.float32)
+    interleaved = np.empty(n * 2, dtype=np.int16)
+    interleaved[0::2] = np.clip(left * 32767.0, -32768, 32767).astype(np.int16)
+    interleaved[1::2] = np.clip(right * 32767.0, -32768, 32767).astype(np.int16)
+    data_bytes = interleaved.tobytes()
+    header = struct.pack(
+        "<4sI4s4sIHHIIHH4sI",
+        b"RIFF",
+        36 + len(data_bytes),
+        b"WAVE",
+        b"fmt ",
+        16,
+        1,
+        2,
+        sr,
+        sr * 4,
+        4,
+        16,
+        b"data",
+        len(data_bytes),
+    )
+    cap_wav = tmp_path / "captura_som_sistema.wav"
+    cap_wav.write_bytes(header + data_bytes)
+
+    with open(cap_wav, "rb") as f:
+        res = client.post(
+            f"/api/audio/import?project_id={pid}",
+            files=[("files", ("captura_som_sistema.wav", f, "audio/wav"))],
+        )
+    assert res.status_code == 200
+    proj = client.get(f"/api/projects/{pid}").json()
+    assert proj["audio_file_path"] is not None
+    assert proj["sample_rate"] == 48000
+    assert proj["channels"] == 2
+    assert abs(proj["duration_sec"] - 2.0) < 0.05
+
+    # Waveform must clearly show the captured audio peaks (never flat)
+    wf = client.get(f"/api/projects/{pid}/waveform?bins=512")
+    assert wf.status_code == 200
+    wf_json = wf.json()
+    assert max(wf_json["max"]) > 0.45
+    assert min(wf_json["min"]) < -0.45
+
+    # Convert & export to WAV, MP3, and FLAC and verify none of them are mute/silent
+    for fmt in ("wav", "mp3", "flac"):
+        exp = client.post(
+            f"/api/projects/{pid}/export",
+            json={"format": fmt, "scope": "full", "speed": 1.0, "semitones": 0, "cents": 0},
+        )
+        assert exp.status_code == 200 and len(exp.content) > 2000
+        out_path = tmp_path / f"exported_{fmt}.{fmt}"
+        out_path.write_bytes(exp.content)
+        decoded, out_sr = decode_audio(out_path, target_sr=48000, mono=False)
+        rms = float(np.sqrt(np.mean(decoded ** 2)))
+        peak = float(np.max(np.abs(decoded)))
+        assert out_sr == 48000
+        assert rms > 0.25, f"{fmt} export was silent/too quiet (rms={rms})"
+        assert peak > 0.40, f"{fmt} export peak too low (peak={peak})"
+

@@ -4,6 +4,15 @@ Todas as mudanças relevantes no **MRQ Estudo Musical** serão documentadas nest
 
 O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e o projeto adota [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [1.0.3] - 2026-11-17
+
+### Corrigido e Adicionado
+- **Captura Estéreo Nativa do Som do Sistema (Windows WASAPI Loopback / macOS ScreenCaptureKit)**:
+  - Adicionado `desktopCapturer` + `session.defaultSession.setDisplayMediaRequestHandler({ audio: 'loopback' })` e gerenciador de permissões locais no Electron (`apps/desktop/main.js`), permitindo capturar diretamente o **áudio de saída do computador (Placa de Som / Estéreo)** em 1 clique — sem depender do microfone mudo e sem silenciar os alto-falantes.
+  - Novo motor estéreo `MRQAudioCaptureSession` (`apps/studio/src/utils/audioCapture.ts`) com `await audioContext.resume()`, saída `GainNode(0)` sem microfonia/eco, seletor de dispositivos (`enumerateDevices()`), VU meter estéreo L/R em tempo real e proteção contra gravações mudas (`overallPeak < 0.0005` bloqueia salvar WAV mudo e alerta o músico).
+  - Novo painel `SystemAudioCaptureBar` integrado logo abaixo do player do YouTube (com gatilhos em 1 clique no player, nas abas de IA/Stems e no modal **Exportar**): ao clicar em **Parar & Gerar Forma de Onda**, o WAV estéreo 16-bit PCM gera imediatamente a **Forma de Onda + Espectrograma FFT** e desbloqueia conversão/exportação em **MP3, WAV e FLAC**, Análise IA, 4 Stems e Pitch Shift ±12st.
+  - Corrigido cache-busting na recarga do áudio (`&v=...`) ao recapturar/substituir áudio no mesmo projeto e preservada a duração real do áudio capturado frente ao player do YouTube.
+
 ## [1.0.2] - 2026-11-17
 
 ### Adicionado
