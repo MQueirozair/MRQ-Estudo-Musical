@@ -6,7 +6,13 @@ O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e o 
 
 ## [Não lançado]
 
+### Adicionado
+- Configurações locais para exibir painéis e dicas, optar pelo registro de erros da interface e verificar atualizações ao iniciar.
+- Download e exclusão do log local da interface; log do motor desktop preservado entre sessões, com rotação na inicialização e acesso pela tela de configurações.
+- Espelhamento horizontal de vídeos locais e do YouTube; link para downloads oficiais. Atualizações continuam sendo instaladas manualmente.
+
 ### Corrigido
+- Comparação de versões de atualização e validação da origem para captura de áudio/tela no desktop.
 - O zoom horizontal por teclado e pela barra agora respeita o mesmo limite de 64× da forma de onda, sem diminuir inesperadamente acima de 32×.
 - Eventos rápidos de rolagem acumulam o zoom em vez de perder passos; a linha do tempo usa a posição visível efetiva como âncora.
 - A trava de proporção do vídeo iguala os eixos ao ser ativada; cancelamentos de ponteiro encerram o arraste e cliques secundários não iniciam operações de arraste.

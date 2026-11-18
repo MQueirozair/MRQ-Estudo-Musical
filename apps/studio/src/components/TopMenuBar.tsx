@@ -58,6 +58,7 @@ interface TopMenuBarProps {
   onAnalyzeChords: () => void;
   onSeparateStems: () => void;
   onOpenHelp: (tab: HelpTab) => void;
+  onOpenSettings: () => void;
   onTapTempoClick: () => void;
 }
 
@@ -86,6 +87,7 @@ export const TopMenuBar: React.FC<TopMenuBarProps> = (props) => {
       { label: 'Exportar (MP3 / WAV / FLAC / M4A / OGG / AIFF / MIDI / PDF)...', shortcut: 'Ctrl+E', onClick: props.onExportOpen },
     ],
     Editar: [
+      { label: 'Configurações...', onClick: props.onOpenSettings, divider: true },
       { label: 'Desfazer (Piano Roll / Acordes)', shortcut: 'Ctrl+Z', onClick: props.onUndo, disabled: !props.canUndo },
       { label: 'Refazer', shortcut: 'Ctrl+Y', onClick: props.onRedo, disabled: !props.canRedo, divider: true },
       { label: 'Quantizar Notas em 1/8 (Colcheia)', onClick: () => props.onQuantizeNotes(0.5) },

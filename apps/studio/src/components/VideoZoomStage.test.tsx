@@ -29,6 +29,15 @@ describe('VideoZoomStage', () => {
     expect(screen.getByTitle(/Zoom Vertical do Vídeo —/).textContent).toContain('100%');
   });
 
+  it('mirrors and restores the video without changing zoom', () => {
+    const { getByTestId } = render(<VideoZoomStage><div data-testid="video" /></VideoZoomStage>);
+    const content = getByTestId('video').parentElement!;
+    fireEvent.click(screen.getByTitle('Espelhar vídeo horizontalmente'));
+    expect(content.style.transform).toContain('scale(-1, 1)');
+    fireEvent.click(screen.getByTitle('Espelhar vídeo horizontalmente'));
+    expect(content.style.transform).toContain('scale(1, 1)');
+  });
+
   it('provides a selectable shield for a cross-origin iframe and restores access', () => {
     render(<VideoZoomStage isIframe><iframe title="Player" /></VideoZoomStage>);
     expect(screen.queryByTitle(/Ctrl\+Scroll: Zoom Horizontal/)).toBeNull();

@@ -1,3 +1,4 @@
+import { recordDiagnostic } from '../settings';
 import type {
   AIModelItem,
   DetectedChord,
@@ -27,6 +28,7 @@ async function apiJson<T>(url: string, init?: RequestInit): Promise<T> {
     } catch {
       // ignore json parse error
     }
+    recordDiagnostic('api', `HTTP ${res.status}: ${detail}`);
     throw new Error(detail);
   }
   return res.json();

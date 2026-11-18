@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Menu, shell, dialog, session, desktopCapturer } = require('electron');
+const { app, BrowserWindow, Menu, shell, dialog, session, desktopCapturer, ipcMain } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const net = require('net');
@@ -158,7 +158,17 @@ async function startBackend() {
     throw new Error(`Executável do motor local não encontrado em: ${cmd}`);
   }
 
-  const logStream = fs.createWriteStream(engineLogPath, { flags: 'w' });
+  // Keep the previous session and rotate on startup instead of erasing diagnostics.
+  try {
+    if (fs.existsSync(engineLogPath) && fs.statSync(engineLogPath).size >= 5 * 1024 * 1024) {
+      fs.rmSync(`${engineLogPath}.1`, { force: true });
+      fs.renameSync(engineLogPath, `${engineLogPath}.1`);
+    }
+  } catch (err) {
+    console.error('[MRQ] Falha ao rotacionar log:', err);
+  }
+  const logStream = fs.createWriteStream(engineLogPath, { flags: 'a' });
+  logStream.on('error', (err) => console.error('[MRQ] Falha ao gravar log do motor:', err));
   logStream.write(`[${new Date().toISOString()}] Starting: ${cmd} ${args.join(' ')}\n`);
   logStream.write(`[${new Date().toISOString()}] CWD: ${cwd}\n`);
   logStream.write(`[${new Date().toISOString()}] MRQ_DSP_LIB: ${env.MRQ_DSP_LIB || '(default)'}\n`);
@@ -256,10 +266,21 @@ function createWindow() {
 }
 
 app.whenReady().then(async () => {
+  ipcMain.handle('mrq:show-engine-log', (event) => {
+    if (!mainWindow || event.sender !== mainWindow.webContents || event.senderFrame !== mainWindow.webContents.mainFrame || !engineLogPath || !fs.existsSync(engineLogPath)) return false;
+    shell.showItemInFolder(engineLogPath);
+    return true;
+  });
   // Grant local media & system audio capture permissions for the MRQ Studio window
   try {
-    const isLocalOrigin = (url = '') =>
-      url.startsWith('http://127.0.0.1') || url.startsWith('http://localhost');
+    const isLocalOrigin = (url = '') => {
+      try {
+        const parsed = new URL(url);
+        return parsed.protocol === 'http:' && parsed.hostname === '127.0.0.1' && parsed.port === String(backendPort);
+      } catch {
+        return false;
+      }
+    };
 
     const generalPermissions = new Set([
       'fullscreen',
@@ -294,7 +315,11 @@ app.whenReady().then(async () => {
 
     // Enable native System Audio Loopback (Windows WASAPI / macOS ScreenCaptureKit) via getDisplayMedia()
     session.defaultSession.setDisplayMediaRequestHandler(
-      async (_request, callback) => {
+      async (request, callback) => {
+        if (!isLocalOrigin(request.securityOrigin || '')) {
+          callback({});
+          return;
+        }
         try {
           const sources = await desktopCapturer.getSources({
             types: ['screen'],

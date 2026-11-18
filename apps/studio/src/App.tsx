@@ -45,6 +45,8 @@ import { ProjectModal } from './components/ProjectModal';
 import { ExportModal } from './components/ExportModal';
 import { ModelManagerModal } from './components/ModelManagerModal';
 import { HelpModals, type HelpTab } from './components/HelpModals';
+import { SettingsModal } from './components/SettingsModal';
+import { readSettings, saveSettings, type Settings } from './settings';
 
 interface HistorySnapshot {
   notes: TranscribedNote[];
@@ -125,6 +127,16 @@ export default function App() {
   }>({ open: false, scope: 'full' });
   const [modelsModalOpen, setModelsModalOpen] = useState(false);
   const [helpTab, setHelpTab] = useState<HelpTab | null>(null);
+  const [settings, setSettings] = useState<Settings>(readSettings);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const updateSettings = (value: Settings) => { setSettings(value); saveSettings(value); };
+
+  useEffect(() => {
+    if (!readSettings().checkUpdates) return;
+    void api.checkUpdates().then((result) => {
+      if (result.update_available) setToast({ kind: 'info', msg: `Atualização ${result.latest_version} disponível em Ajuda → Diagnóstico & Updates.` });
+    }).catch(() => {});
+  }, []);
 
   const showToast = useCallback((kind: 'info' | 'error' | 'success', msg: string) => {
     setToast({ kind, msg });
@@ -1020,6 +1032,7 @@ export default function App() {
         onAnalyzeChords={() => void runAnalysis('chords')}
         onSeparateStems={() => void handleSeparateStems()}
         onOpenHelp={(t) => setHelpTab(t)}
+        onOpenSettings={() => setSettingsOpen(true)}
         onTapTempoClick={() => void handleTapTempo()}
       />
 
@@ -1182,7 +1195,7 @@ export default function App() {
           />
         )}
 
-        {(!isYouTubeMode || hasAudioTrack) && (
+        {settings.waveform && (!isYouTubeMode || hasAudioTrack) && (
           <WaveformCanvas
             waveform={waveform}
             spectrogram={spectrogram}
@@ -1263,7 +1276,7 @@ export default function App() {
         />
 
         {/* 4. SPEED (TIME STRETCHING) & PITCH (TRANSPOSITION) PANELS */}
-        <SpeedPitchPanel
+        {settings.speedPanel && <SpeedPitchPanel
           speed={speed}
           semitones={semitones}
           octaves={octaves}
@@ -1296,7 +1309,7 @@ export default function App() {
             setCents(0);
             void saveProjectParams({ semitones: 0, octaves: 0, cents: 0 });
           }}
-        />
+        />}
 
         {/* 5. TABBED STUDIO DOCK (PIANO ROLL | CHORDS | STEMS | LOOPS | INFO & MARKERS) */}
         <section className="bg-[#0F172A] border border-slate-800 rounded-xl overflow-hidden flex flex-col">
@@ -1495,7 +1508,7 @@ export default function App() {
         </section>
 
         {/* Bottom Keyboard Shortcut Helper Ribbon (TuneTranscriber v3 style) */}
-        <footer className="hidden sm:flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-[11px] text-slate-500 py-1">
+        {settings.shortcuts && <footer className="hidden sm:flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-[11px] text-slate-500 py-1">
           <span>
             <kbd className="px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-300 font-mono text-[10px]">
               space
@@ -1542,7 +1555,7 @@ export default function App() {
             </kbd>{' '}
             YouTube
           </span>
-        </footer>
+        </footer>}
       </main>
 
       {/* Mobile / Android Bottom Adaptive Navigation Bar */}
@@ -1641,6 +1654,7 @@ export default function App() {
       />
 
       <HelpModals tab={helpTab} onClose={() => setHelpTab(null)} onChangeTab={(t) => setHelpTab(t)} />
+      {settingsOpen && <SettingsModal settings={settings} onChange={updateSettings} onClose={() => setSettingsOpen(false)} />}
     </div>
   );
 }

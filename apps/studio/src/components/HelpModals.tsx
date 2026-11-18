@@ -74,6 +74,8 @@ export const HelpModals: React.FC<HelpModalsProps> = ({ tab, onClose, onChangeTa
     setChecking(true);
     try {
       setUpdates(await api.checkUpdates());
+    } catch {
+      setUpdates({ update_available: false, message: 'Não foi possível verificar atualizações. Tente novamente.' });
     } finally {
       setChecking(false);
     }
@@ -573,6 +575,8 @@ export const HelpModals: React.FC<HelpModalsProps> = ({ tab, onClose, onChangeTa
                   <RefreshCw className={`w-3.5 h-3.5 ${checking ? 'animate-spin' : ''}`} />
                   <span>{checking ? 'Verificando...' : 'Verificar Atualizações'}</span>
                 </button>
+                <a href="https://github.com/MQueirozair/MRQ-Estudo-Musical/releases" target="_blank" rel="noopener noreferrer" className="text-sky-300 underline text-xs">Abrir página oficial de downloads</a>
+                <p className="w-full text-xs text-slate-400">A instalação é manual. A verificação usa releases estáveis; versões de teste podem não aparecer.</p>
               </div>
             </div>
           )}

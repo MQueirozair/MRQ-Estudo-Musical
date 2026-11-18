@@ -96,6 +96,18 @@ Guia completo com texto e imagens explicando **como o programa inteiro funciona*
 
 ---
 
+## Configurações, atualização e diagnóstico
+
+Em **Editar → Configurações**, mostre ou oculte a forma de onda, o painel de velocidade/afinação e as dicas de atalhos. Omitir um painel não apaga o projeto nem redefine seus valores. As preferências são locais ao navegador/perfil do aplicativo.
+
+O registro de erros da interface é opcional e desativado por padrão. Quando habilitado, guarda até 100 ocorrências localmente; use **Baixar log da interface** ou **Apagar log**. Mensagens podem conter informações pessoais: revise antes de compartilhar. O registro não captura todos os erros possíveis nem envia dados automaticamente.
+
+No desktop, o motor mantém `engine.log` na pasta de dados do aplicativo, independentemente dessa opção. Use **Mostrar log do motor**; o arquivo é preservado entre sessões e rotacionado ao iniciar quando excede 5 MB. Revise o conteúdo antes de compartilhar.
+
+Em **Ajuda → Diagnóstico & Updates**, verifique a versão estável e abra a página oficial de downloads. Em Configurações é possível habilitar a verificação ao iniciar. A instalação de uma atualização é manual; versões de teste podem não ser mostradas como estáveis.
+
+O botão **Espelhar** no vídeo local ou do YouTube inverte a imagem horizontalmente; clique novamente para restaurar.
+
 ## 5. Atalhos de Teclado Essenciais
 
 | Tecla | Ação |

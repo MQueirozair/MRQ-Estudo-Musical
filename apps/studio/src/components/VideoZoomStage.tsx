@@ -44,6 +44,7 @@ export const VideoZoomStage: React.FC<VideoZoomStageProps> = ({
   const [panX, setPanX] = useState(0);
   const [panY, setPanY] = useState(0);
   const [lockAspect, setLockAspect] = useState(false);
+  const [mirrored, setMirrored] = useState(false);
   const [wheelMode, setWheelMode] = useState<WheelZoomMode>('auto');
   const [modifierActive, setModifierActive] = useState(false);
   const [dragging, setDragging] = useState(false);
@@ -300,7 +301,7 @@ export const VideoZoomStage: React.FC<VideoZoomStageProps> = ({
         <div
           className="w-full h-full will-change-transform"
           style={{
-            transform: `translate3d(${panX}px, ${panY}px, 0) scale(${zoomH}, ${zoomV})`,
+            transform: `translate3d(${panX}px, ${panY}px, 0) scale(${mirrored ? -zoomH : zoomH}, ${zoomV})`,
             transformOrigin: 'center center',
             transition: dragging ? 'none' : 'transform 110ms cubic-bezier(0.22, 1, 0.36, 1)',
           }}
@@ -441,6 +442,11 @@ export const VideoZoomStage: React.FC<VideoZoomStageProps> = ({
           >
             {lockAspect ? <Link2 className="w-3 h-3" /> : <Link2Off className="w-3 h-3" />}
             <span>{lockAspect ? 'H=V' : 'H/V Livre'}</span>
+          </button>
+
+          <button type="button" onClick={() => setMirrored((value) => !value)} aria-pressed={mirrored}
+            title="Espelhar vídeo horizontalmente" className={`px-2 py-1 rounded-lg border text-[10px] font-semibold ${mirrored ? 'border-sky-500 text-sky-200 bg-sky-500/20' : 'border-slate-800 text-slate-400 bg-slate-950'}`}>
+            {mirrored ? 'Espelho ligado' : 'Espelhar'}
           </button>
 
           {/* Reset 1:1 */}

@@ -28,6 +28,7 @@ from fastapi import FastAPI, File, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
+from packaging.version import InvalidVersion, Version
 
 from ai.bpm_detection import analyze_bpm_and_beats, compute_tap_tempo
 from ai.chord_detection import analyze_chords
@@ -188,11 +189,19 @@ def create_app(data_dir: Optional[str | Path] = None) -> FastAPI:
             req = urllib.request.Request(url, headers={"User-Agent": "MRQ-Estudo-Musical/1.0"})
             with urllib.request.urlopen(req, timeout=5) as resp:
                 data = json.loads(resp.read().decode("utf-8"))
-                latest = str(data.get("tag_name", current)).lstrip("v")
+                latest = str(data.get("tag_name", "")).removeprefix("v")
+                try:
+                    available = Version(latest) > Version(str(current))
+                except InvalidVersion:
+                    return {
+                        "current_version": current, "latest_version": latest,
+                        "update_available": False, "online": True,
+                        "message": "Não foi possível comparar a versão publicada; consulte as releases manualmente.",
+                    }
                 return {
                     "current_version": current,
                     "latest_version": latest,
-                    "update_available": latest != current,
+                    "update_available": available,
                     "release_url": data.get("html_url"),
                     "online": True,
                 }
