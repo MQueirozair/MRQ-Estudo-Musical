@@ -39,4 +39,5 @@ jobs:
       - name: Build Frontend Studio (TypeScript + Vite)
         run: |
           npm --prefix apps/studio ci
+          npm --prefix apps/studio test
           npm --prefix apps/studio run build

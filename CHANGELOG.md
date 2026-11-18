@@ -4,6 +4,14 @@ Todas as mudanças relevantes no **MRQ Estudo Musical** serão documentadas nest
 
 O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e o projeto adota [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Não lançado]
+
+### Corrigido
+- O zoom horizontal por teclado e pela barra agora respeita o mesmo limite de 64× da forma de onda, sem diminuir inesperadamente acima de 32×.
+- Eventos rápidos de rolagem acumulam o zoom em vez de perder passos; a linha do tempo usa a posição visível efetiva como âncora.
+- A trava de proporção do vídeo iguala os eixos ao ser ativada; cancelamentos de ponteiro encerram o arraste e cliques secundários não iniciam operações de arraste.
+- Adicionados testes de interface para zoom, trava, reset e escudo do player, executados no CI.
+
 ## [1.0.5] - 2026-11-17
 
 ### Adicionado e Melhorado

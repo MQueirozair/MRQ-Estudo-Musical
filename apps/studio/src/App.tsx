@@ -836,7 +836,7 @@ export default function App() {
         e.preventDefault();
         handleRedo();
       } else if (e.key === '+' || e.key === '=') {
-        setZoomH((z) => Math.min(32, z * 1.4));
+        setZoomH((z) => Math.min(64, z * 1.4));
       } else if (e.key === '-') {
         setZoomH((z) => Math.max(1, z / 1.4));
       } else if (e.key === '0') {
@@ -1006,7 +1006,7 @@ export default function App() {
         onViewModeChange={setViewMode}
         onToggleBeats={() => setShowBeats((v) => !v)}
         onSelectBottomTab={setBottomTab}
-        onZoomIn={() => setZoomH((z) => Math.min(32, z * 1.5))}
+        onZoomIn={() => setZoomH((z) => Math.min(64, z * 1.5))}
         onZoomOut={() => setZoomH((z) => Math.max(1, z / 1.5))}
         onZoomReset={() => {
           setZoomH(1);

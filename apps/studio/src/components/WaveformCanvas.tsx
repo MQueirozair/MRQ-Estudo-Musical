@@ -183,8 +183,12 @@ export const WaveformCanvas: React.FC<WaveformCanvasProps> = ({
           nextZoomH <= 1.01
             ? 0
             : Math.max(0, Math.min(nextMaxStart, anchorTime - cursorRatio * nextSpan));
+        s.clampedStart = nextStart;
+        s.visibleSpan = nextSpan;
+        s.maxStart = nextMaxStart;
         setViewStartSec(nextStart);
       }
+      s.zoomH = nextZoomH;
       onZoomHChange(nextZoomH);
       flashHud(`Zoom Horizontal: ${nextZoomH.toFixed(1)}× · Vertical: ${s.zoomV.toFixed(1)}×`);
     },
@@ -195,6 +199,7 @@ export const WaveformCanvas: React.FC<WaveformCanvasProps> = ({
     (factor: number) => {
       const s = wheelStateRef.current;
       const nextZoomV = Number(Math.max(0.5, Math.min(5.0, s.zoomV * factor)).toFixed(2));
+      s.zoomV = nextZoomV;
       onZoomVChange(nextZoomV);
       flashHud(`Zoom Vertical: ${nextZoomV.toFixed(1)}× · Horizontal: ${s.zoomH.toFixed(1)}×`);
     },

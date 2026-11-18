@@ -80,6 +80,9 @@ export const VideoZoomStage: React.FC<VideoZoomStageProps> = ({
     (nextH: number, nextV: number, labelPrefix?: string) => {
       const zh = Number(clamp(nextH, MIN_ZOOM, MAX_ZOOM).toFixed(2));
       const zv = Number(clamp(nextV, MIN_ZOOM, MAX_ZOOM).toFixed(2));
+      // Wheel events can arrive together before React renders; preserve every step.
+      stateRef.current.zoomH = zh;
+      stateRef.current.zoomV = zv;
       setZoomH(zh);
       setZoomV(zv);
       setPanX((px) => {
@@ -231,7 +234,7 @@ export const VideoZoomStage: React.FC<VideoZoomStageProps> = ({
     // Allow drag-to-pan when zoomed (left click in pan/shield mode or middle click anytime)
     const allowPan =
       isZoomed &&
-      (e.button === 1 || wheelMode === 'pan' || modifierActive || (!isIframe && e.button === 0));
+      (e.button === 1 || (e.button === 0 && (wheelMode === 'pan' || modifierActive || !isIframe)));
     if (!allowPan) return;
 
     e.preventDefault();
@@ -275,6 +278,8 @@ export const VideoZoomStage: React.FC<VideoZoomStageProps> = ({
         onPointerDown={!isIframe ? handlePointerDown : undefined}
         onPointerMove={!isIframe ? handlePointerMove : undefined}
         onPointerUp={!isIframe ? handlePointerUp : undefined}
+        onPointerCancel={!isIframe ? handlePointerUp : undefined}
+        onLostPointerCapture={!isIframe ? handlePointerUp : undefined}
         onDoubleClick={!isIframe && isZoomed ? resetZoom : undefined}
         className={`relative w-full ${
           isZoomed ? 'max-w-full' : baseMaxWidthClass
@@ -309,6 +314,8 @@ export const VideoZoomStage: React.FC<VideoZoomStageProps> = ({
             onPointerDown={handlePointerDown}
             onPointerMove={handlePointerMove}
             onPointerUp={handlePointerUp}
+            onPointerCancel={handlePointerUp}
+            onLostPointerCapture={handlePointerUp}
             onDoubleClick={resetZoom}
             className={`absolute inset-0 z-20 ${
               wheelMode === 'pan' || (isZoomed && modifierActive)
@@ -417,7 +424,10 @@ export const VideoZoomStage: React.FC<VideoZoomStageProps> = ({
           {/* Lock Proportional H=V toggle */}
           <button
             type="button"
-            onClick={() => setLockAspect((v) => !v)}
+            onClick={() => {
+              if (!lockAspect) applyZoom(zoomH, zoomH, 'Proporção travada');
+              setLockAspect(!lockAspect);
+            }}
             className={`px-2 py-1 rounded-lg border text-[10px] font-semibold flex items-center gap-1 transition ${
               lockAspect
                 ? 'bg-sky-500/20 border-sky-500/50 text-sky-200'

@@ -634,7 +634,7 @@ export const YouTubeStudyPlayer = forwardRef<YouTubeStudyPlayerHandle, YouTubeSt
     );
 
     const handleTimelinePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-      if (duration <= 0) return;
+      if (duration <= 0 || e.button !== 0) return;
       const target = e.target as HTMLElement;
       const handleRole = target.dataset.handle;
       const sec = clientXToSec(e.clientX);
@@ -713,7 +713,7 @@ export const YouTubeStudyPlayer = forwardRef<YouTubeStudyPlayerHandle, YouTubeSt
     timelineWheelStateRef.current = {
       zoom,
       timelineZoomV,
-      viewStartFrac,
+      viewStartFrac: clampedStartFrac,
       duration,
       currentTime,
       timelineWheelMode,
@@ -723,6 +723,7 @@ export const YouTubeStudyPlayer = forwardRef<YouTubeStudyPlayerHandle, YouTubeSt
       const s = timelineWheelStateRef.current;
       const next = Math.max(1, Math.min(32, Number((s.zoom * factor).toFixed(2))));
       if (next <= 1.01) {
+        s.viewStartFrac = 0;
         setViewStartFrac(0);
       } else {
         const el = timelineRef.current;
@@ -737,8 +738,10 @@ export const YouTubeStudyPlayer = forwardRef<YouTubeStudyPlayerHandle, YouTubeSt
         const anchorFrac = s.viewStartFrac + cursorRatio * curSpanFrac;
         const nextSpanFrac = 1 / next;
         const nextStart = Math.max(0, Math.min(1 - nextSpanFrac, anchorFrac - cursorRatio * nextSpanFrac));
+        s.viewStartFrac = nextStart;
         setViewStartFrac(nextStart);
       }
+      s.zoom = next;
       setZoom(next);
     }, []);
 
@@ -1082,6 +1085,8 @@ export const YouTubeStudyPlayer = forwardRef<YouTubeStudyPlayerHandle, YouTubeSt
             onPointerDown={handleTimelinePointerDown}
             onPointerMove={handleTimelinePointerMove}
             onPointerUp={handleTimelinePointerUp}
+            onPointerCancel={() => { dragModeRef.current = 'none'; }}
+            onLostPointerCapture={() => { dragModeRef.current = 'none'; }}
             style={{ height: `${timelineHeightPx}px` }}
             className="relative rounded-xl bg-slate-950/90 border border-slate-800 overflow-hidden cursor-crosshair touch-none transition-[height] duration-150"
           >

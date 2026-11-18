@@ -116,3 +116,5 @@ Guia completo com texto e imagens explicando **como o programa inteiro funciona*
 | `Ctrl+S` | Salvar projeto imediatamente |
 | `Ctrl+Z` / `Ctrl+Y` | Desfazer / Refazer no Piano Roll e Acordes |
 | `?` | Abrir a Central de Ajuda |
+
+**YouTube:** quando o foco do teclado estiver dentro do player incorporado, o navegador pode não encaminhar os modificadores ao aplicativo. Se o atalho não responder, clique fora do vídeo antes de segurar a tecla ou selecione `Zoom H` / `Zoom V` na barra do vídeo; volte a `Auto` para usar os controles do player.
