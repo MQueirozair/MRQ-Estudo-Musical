@@ -46,6 +46,9 @@ import { ExportModal } from './components/ExportModal';
 import { ModelManagerModal } from './components/ModelManagerModal';
 import { HelpModals, type HelpTab } from './components/HelpModals';
 import { SettingsModal } from './components/SettingsModal';
+import { PracticeRecording } from './components/PracticeRecording';
+import { PracticeMetronome } from './components/PracticeMetronome';
+import { rhythmAtTime } from './audio/rhythm';
 import { readSettings, saveSettings, type Settings } from './settings';
 
 interface HistorySnapshot {
@@ -274,6 +277,8 @@ export default function App() {
     void engineRef.current?.loadStems(urls, speed, cacheKey);
   }, [stemMixer, project?.id, project?.audio_file_path, project?.analysis?.stems, speed, totalSemitones, cents]);
 
+  const practiceRhythm = useMemo(() => rhythmAtTime(project?.bpm, project?.time_signature, project?.analysis?.bpm?.tempo_changes || [], currentTime, speed), [project?.bpm, project?.time_signature, project?.analysis?.bpm?.tempo_changes, currentTime, speed]);
+
   // Keep engine synced with Loop, Precount and Volume
   useEffect(() => {
     engineRef.current?.setLoop(loopEnabled, loopA, loopB);
@@ -281,7 +286,8 @@ export default function App() {
 
   useEffect(() => {
     engineRef.current?.setPrecount(precountSec);
-  }, [precountSec]);
+    engineRef.current?.setPrecountRhythm(practiceRhythm.beatSec, practiceRhythm.beatsPerBar);
+  }, [precountSec, practiceRhythm.beatSec, practiceRhythm.beatsPerBar]);
 
   useEffect(() => {
     engineRef.current?.setVolume(volume, muted);
@@ -1125,6 +1131,8 @@ export default function App() {
             loopA={loopA}
             loopB={loopB}
             precountSec={precountSec}
+            precountBeatSec={practiceRhythm.beatSec}
+            beatsPerBar={practiceRhythm.beatsPerBar}
             markers={project.markers || []}
             manualBeats={project.manual_beats || []}
             hasAttachedAudio={hasAudioTrack}
@@ -1243,6 +1251,8 @@ export default function App() {
           loopB={loopB}
           precountSec={precountSec}
           precountRemaining={precountRemaining}
+          precountBeatSec={practiceRhythm.beatSec}
+          beatsPerBar={practiceRhythm.beatsPerBar}
           tapBpm={tapBpm}
           currentChordSymbol={currentChord?.symbol || null}
           onTogglePlay={playbackToggle}
@@ -1274,6 +1284,11 @@ export default function App() {
           onAddMarkerNow={() => void handleAddMarkerAt(currentTime)}
           onAddBeatNow={() => void handleAddBeatAt(currentTime)}
         />
+
+        {settings.metronome && <PracticeMetronome currentTime={currentTime} playing={isPlaying && precountRemaining <= 0}
+          beats={(project?.analysis?.bpm?.beats?.length ? project.analysis.bpm.beats : project?.manual_beats) || []}
+          beatDuration={practiceRhythm.beatSec * speed} beatsPerBar={practiceRhythm.beatsPerBar} bpm={practiceRhythm.bpm} />}
+        {settings.practiceRecording && <PracticeRecording />}
 
         {/* 4. SPEED (TIME STRETCHING) & PITCH (TRANSPOSITION) PANELS */}
         {settings.speedPanel && <SpeedPitchPanel

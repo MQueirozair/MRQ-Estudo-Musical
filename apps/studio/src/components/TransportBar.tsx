@@ -36,6 +36,8 @@ interface TransportBarProps {
   loopB: number;
   precountSec: number;
   precountRemaining: number;
+  precountBeatSec: number;
+  beatsPerBar: number;
   tapBpm: number | null;
   currentChordSymbol: string | null;
   onTogglePlay: () => void;
@@ -62,6 +64,8 @@ export const TransportBar: React.FC<TransportBarProps> = ({
   loopB,
   precountSec,
   precountRemaining,
+  precountBeatSec,
+  beatsPerBar,
   tapBpm,
   currentChordSymbol,
   onTogglePlay,
@@ -202,6 +206,10 @@ export const TransportBar: React.FC<TransportBarProps> = ({
         <div className="flex items-center gap-1 bg-slate-950/70 border border-slate-800 rounded-lg p-1">
           <Timer className="w-3.5 h-3.5 text-slate-400 ml-1" />
           <span className="text-[10px] text-slate-400 mr-1 hidden xl:inline">Pré-cont.:</span>
+          {[1, 2].map((bars) => {
+            const seconds = Math.round(bars * beatsPerBar * precountBeatSec * 1000) / 1000;
+            return <button key={`bars-${bars}`} type="button" disabled={seconds > 120} onClick={() => onPrecountChange(seconds)} title="Calculado com BPM, compasso e velocidade atuais; selecione novamente se mudarem" className="px-1.5 py-0.5 rounded text-[11px] text-emerald-300 hover:bg-slate-800 disabled:opacity-50">{bars} comp.</button>;
+          })}
           {PRECOUNT_OPTIONS.map((opt) => (
             <button
               key={opt.value}

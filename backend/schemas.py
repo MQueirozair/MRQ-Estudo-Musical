@@ -28,7 +28,7 @@ class ProjectUpdateRequest(BaseModel):
     semitones: Optional[int] = Field(default=None, ge=-24, le=24)
     octaves: Optional[int] = Field(default=None, ge=-2, le=2)
     cents: Optional[int] = Field(default=None, ge=-100, le=100)
-    precount_sec: Optional[float] = Field(default=None, ge=0.0, le=5.0)
+    precount_sec: Optional[float] = Field(default=None, ge=0.0, le=120.0)
     bpm: Optional[float] = Field(default=None, ge=20.0, le=350.0)
     musical_key: Optional[str] = None
     scale_name: Optional[str] = None
@@ -103,7 +103,7 @@ class AutosaveRequest(BaseModel):
 
 
 class ExportRequest(BaseModel):
-    format: str  # mp3 | wav | flac | m4a | aac | ogg | aiff | mid | txt_notes | txt_chords | pdf
+    format: str  # mp3 | wav | flac | m4a | aac | ogg | aiff | mid | musicxml | txt_notes | txt_chords | pdf
     scope: str = "full"  # full | selection | loop | stem | stems_mix
     start_sec: Optional[float] = None
     end_sec: Optional[float] = None

@@ -7,6 +7,9 @@ O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e o 
 ## [Não lançado]
 
 ### Adicionado
+- Metrônomo de acompanhamento aproximado por batidas detectadas/manuais ou grade regular; pré-contagem por 1 ou 2 compassos no BPM/compasso/velocidade atuais.
+- Gravação local de prática pelo microfone, audição e download, com limite de cinco minutos e comparação manual.
+- Exportação MusicXML de notas polifônicas com divisão por compassos e ligaduras; ritmo aproximado em BPM constante.
 - Configurações locais para exibir painéis e dicas, optar pelo registro de erros da interface e verificar atualizações ao iniciar.
 - Download e exclusão do log local da interface; log do motor desktop preservado entre sessões, com rotação na inicialização e acesso pela tela de configurações.
 - Espelhamento horizontal de vídeos locais e do YouTube; link para downloads oficiais. Atualizações continuam sendo instaladas manualmente.

@@ -75,6 +75,7 @@ Guia completo com texto e imagens explicando **como o programa inteiro funciona*
 | **`.FLAC`** | Sem Perdas (Lossless) | FLAC Lossless | Qualidade de estúdio ocupando ~50% menos espaço que WAV |
 | **`.AIFF`** | Sem Perdas (Lossless) | PCM 16-bit Big-Endian | Padrão Apple, Logic Pro, GarageBand e Pro Tools |
 | **`.MID`** | Transcrição Musical | Standard MIDI File Type 1 | Importar notas do Piano Roll em DAWs, MuseScore ou Guitar Pro |
+| **`.musicxml`** | Partitura editável | MusicXML 4.0 | Exportar notas simultâneas, compassos e ligaduras para um editor de partitura |
 | **Notas `.TXT`** | Transcrição Musical | Texto UTF-8 | Tabela completa com tempos, nota, MIDI, velocidade e papel |
 | **Cifras `.TXT`** | Transcrição Musical | Texto UTF-8 | Folha de cifras com progressão harmônica, marcadores, loops e link |
 | **Relatório `.PDF`** | Documento Completo | PDF A4 (ReportLab) | Impressão/tablet: resumo completo do estudo (BPM, Tom, Loops, Cifras, Notas) |
@@ -95,6 +96,13 @@ Guia completo com texto e imagens explicando **como o programa inteiro funciona*
 5. **Mix de Stems (Karaokê / Playback)** — exporta sua mixagem personalizada com volumes, mutes, velocidade e afinação aplicados.
 
 ---
+
+## Metrônomo, gravação de prática e partitura
+
+- Na barra de transporte, selecione **1 comp.** ou **2 comp.** para calcular a pré-contagem pelo BPM, compasso e velocidade no momento da seleção. Se esses valores mudarem, selecione novamente. O clique acentua o primeiro tempo; sem BPM definido é usado 120 BPM.
+- Ative **Metrônomo** para acompanhar a reprodução. São usadas as batidas detectadas ou manuais disponíveis; sem elas, é usada uma grade regular a partir de 0:00. O andamento indicado acompanha alterações de andamento detectadas, mas não é possível editar um mapa de andamento aqui. A sincronização usa o relógio da interface e é **aproximada**, especialmente em vídeos do YouTube ou sob carga; as batidas e acentos detectados podem exigir correção.
+- Em **Grave sua execução**, autorize o microfone, grave até cinco minutos, pare e ouça ou baixe o arquivo antes de fechar a página. Compare com a referência manualmente; não há sincronização automática ou compensação de latência. Use fones para reduzir vazamento da música no microfone. Os controles podem ser ocultados em Configurações.
+- Em **Exportar → Partitura (MusicXML)**, as notas do Piano Roll são convertidas para uma partitura editável, com vozes independentes e ligaduras entre compassos. É uma aproximação baseada no BPM constante e compasso do projeto (padrão: 120 BPM e 4/4); ela não segue mudanças de andamento e não faz transcrição rítmica refinada. Revise a notação num editor de partituras.
 
 ## Configurações, atualização e diagnóstico
 

@@ -56,6 +56,8 @@ interface YouTubeStudyPlayerProps {
   loopA: number;
   loopB: number;
   precountSec: number;
+  precountBeatSec: number;
+  beatsPerBar: number;
   markers: MarkerItem[];
   manualBeats: number[];
   onTimeUpdate: (sec: number) => void;
@@ -164,6 +166,8 @@ export const YouTubeStudyPlayer = forwardRef<YouTubeStudyPlayerHandle, YouTubeSt
       loopA,
       loopB,
       precountSec,
+      precountBeatSec,
+      beatsPerBar,
       markers,
       manualBeats,
       onTimeUpdate,
@@ -203,8 +207,8 @@ export const YouTubeStudyPlayer = forwardRef<YouTubeStudyPlayerHandle, YouTubeSt
     const dragAnchorSecRef = useRef(0);
 
     // Keep latest props in refs for rAF loop & precount callbacks
-    const loopRef = useRef({ enabled: loopEnabled, a: loopA, b: loopB, precount: precountSec });
-    loopRef.current = { enabled: loopEnabled, a: loopA, b: loopB, precount: precountSec };
+    const loopRef = useRef({ enabled: loopEnabled, a: loopA, b: loopB, precount: precountSec, beatSec: precountBeatSec, beatsPerBar });
+    loopRef.current = { enabled: loopEnabled, a: loopA, b: loopB, precount: precountSec, beatSec: precountBeatSec, beatsPerBar };
 
     const speedRef = useRef(speed);
     speedRef.current = speed;
@@ -243,12 +247,12 @@ export const YouTubeStudyPlayer = forwardRef<YouTubeStudyPlayerHandle, YouTubeSt
           return;
         }
         precountBusyRef.current = true;
-        const steps = pc < 1 ? 2 : Math.round(pc);
-        const stepMs = (pc * 1000) / steps;
+        const stepMs = Math.max(80, loopRef.current.beatSec * 1000);
+        const steps = Math.ceil(pc * 1000 / stepMs);
         for (let i = 0; i < steps; i++) {
           const timerId = window.setTimeout(() => {
             onPrecountTickRef.current(Number((pc - (i * stepMs) / 1000).toFixed(1)));
-            playClickSound(i === 0);
+            playClickSound(i % loopRef.current.beatsPerBar === 0);
           }, i * stepMs);
           precountTimersRef.current.push(timerId);
         }

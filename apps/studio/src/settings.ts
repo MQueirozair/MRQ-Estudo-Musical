@@ -1,6 +1,8 @@
 export interface Settings {
   waveform: boolean;
   speedPanel: boolean;
+  practiceRecording: boolean;
+  metronome: boolean;
   shortcuts: boolean;
   diagnostics: boolean;
   checkUpdates: boolean;
@@ -8,7 +10,7 @@ export interface Settings {
 
 export const SETTINGS_KEY = 'mrq.settings.v1';
 export const LOG_KEY = 'mrq.diagnostics.v1';
-export const defaultSettings: Settings = { waveform: true, speedPanel: true, shortcuts: true, diagnostics: false, checkUpdates: false };
+export const defaultSettings: Settings = { waveform: true, speedPanel: true, practiceRecording: true, metronome: true, shortcuts: true, diagnostics: false, checkUpdates: false };
 
 export function readSettings(): Settings {
   try {

@@ -8,6 +8,8 @@ export function SettingsModal({ settings, onChange, onClose }: Props) {
   const choices: Array<[keyof Settings, string, string]> = [
     ['waveform', 'Forma de onda / espectrograma', 'Mostrar ou ocultar o painel de análise visual.'],
     ['speedPanel', 'Controles de velocidade e afinação', 'Mostrar ou ocultar o painel; os valores atuais são mantidos.'],
+    ['practiceRecording', 'Gravação de prática', 'Mostrar o gravador de microfone para comparação.'],
+    ['metronome', 'Metrônomo', 'Mostrar ou ocultar os controles do metrônomo.'],
     ['shortcuts', 'Dicas de atalhos', 'Mostrar a faixa de dicas no rodapé.'],
     ['diagnostics', 'Registrar erros da interface', 'Guarda até 100 erros localmente neste dispositivo.'],
     ['checkUpdates', 'Verificar atualizações ao abrir', 'Consulta o GitHub quando o aplicativo inicia.'],

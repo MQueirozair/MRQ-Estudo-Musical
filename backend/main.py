@@ -58,6 +58,7 @@ from core.audio_engine.decoder import (
     encode_audio,
 )
 from core.audio_engine.exporter import ProjectExporter
+from core.audio_engine.musicxml_export import export_musicxml
 from database.repository import ProjectRepository
 from plugins import registry as plugin_registry
 from scripts.generate_demo_audio import generate_study_song
@@ -960,6 +961,14 @@ def create_app(data_dir: Optional[str | Path] = None) -> FastAPI:
                 time_signature=proj.get("time_signature") or "4/4",
             )
             return FileResponse(str(out_path), media_type="audio/midi", filename=out_path.name)
+
+        if fmt == "musicxml":
+            out_path = audio_mgr.exports_dir / f"{safe_name}_{ts}.musicxml"
+            try:
+                export_musicxml(proj, out_path)
+            except ValueError as exc:
+                raise HTTPException(status_code=400, detail=str(exc))
+            return FileResponse(str(out_path), media_type="application/vnd.recordare.musicxml+xml", filename=out_path.name)
 
         if fmt == "txt_notes":
             out_path = audio_mgr.exports_dir / f"{safe_name}_notas_{ts}.txt"

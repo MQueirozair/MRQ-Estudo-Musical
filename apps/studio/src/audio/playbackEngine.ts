@@ -46,6 +46,8 @@ export class MRQPlaybackEngine {
   private loopA = 0;
   private loopB = 0;
   private precountSec = 0;
+  private precountBeatSec = 0.5;
+  private beatsPerBar = 4;
 
   private stemMixer: StemMixerState = {
     enabled: false,
@@ -99,6 +101,11 @@ export class MRQPlaybackEngine {
 
   public setPrecount(sec: number): void {
     this.precountSec = Math.max(0, sec);
+  }
+
+  public setPrecountRhythm(beatSec: number, beatsPerBar: number): void {
+    this.precountBeatSec = Math.max(0.08, Math.min(5, beatSec));
+    this.beatsPerBar = Math.max(1, Math.min(32, Math.round(beatsPerBar)));
   }
 
   public setStemMixer(mixer: StemMixerState): void {
@@ -274,7 +281,7 @@ export class MRQPlaybackEngine {
 
     const totalMs = this.precountSec * 1000;
     this.precountEndPerf = performance.now() + totalMs;
-    let lastWholeSec = Math.ceil(this.precountSec);
+    let lastBeat = 0;
     this.playMetronomeClick(true);
     this.cb.onPrecountUpdate(this.precountSec);
 
@@ -287,10 +294,10 @@ export class MRQPlaybackEngine {
         return;
       }
       const remSec = remMs / 1000;
-      const whole = Math.ceil(remSec);
-      if (whole < lastWholeSec) {
-        lastWholeSec = whole;
-        this.playMetronomeClick(whole === 1);
+      const beat = Math.floor((this.precountSec - remSec) / this.precountBeatSec);
+      if (beat > lastBeat) {
+        lastBeat = beat;
+        this.playMetronomeClick(beat % this.beatsPerBar === 0);
       }
       this.cb.onPrecountUpdate(Math.round(remSec * 10) / 10);
     }, 50);

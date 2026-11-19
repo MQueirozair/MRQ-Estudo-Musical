@@ -40,7 +40,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
 }) => {
   const hasAudio = Boolean(project.audio_file_path);
   const [format, setFormat] = useState<
-    'mp3' | 'wav' | 'flac' | 'm4a' | 'ogg' | 'aac' | 'aiff' | 'mid' | 'txt_notes' | 'txt_chords' | 'pdf'
+    'mp3' | 'wav' | 'flac' | 'm4a' | 'ogg' | 'aac' | 'aiff' | 'mid' | 'musicxml' | 'txt_notes' | 'txt_chords' | 'pdf'
   >(hasAudio ? 'mp3' : 'pdf');
   const [scope, setScope] = useState<'full' | 'loop' | 'selection' | 'stem' | 'stems_mix'>(defaultScope);
   const [stemKey, setStemKey] = useState<StemKey>(defaultStemKey);
@@ -120,6 +120,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
     { id: 'aac', label: 'AAC (ADTS)', desc: 'Áudio leve pronto para streaming', requiresAudio: true, Icon: FileAudio },
     { id: 'aiff', label: 'AIFF (PCM Estúdio)', desc: 'Sem perdas padrão Logic / Pro Tools / Mac', requiresAudio: true, Icon: FileAudio },
     { id: 'mid', label: 'MIDI (.mid)', desc: 'Transcrição editada do Piano Roll (SMF)', requiresAudio: false, Icon: FileMusic },
+    { id: 'musicxml', label: 'Partitura (MusicXML)', desc: 'Notas em andamento constante; revise ritmo e notação no editor', requiresAudio: false, Icon: FileMusic },
     { id: 'txt_notes', label: 'Notas (TXT)', desc: 'Tabela completa de notas, tempos e confiança', requiresAudio: false, Icon: FileText },
     { id: 'txt_chords', label: 'Cifras (TXT)', desc: 'Progressão harmônica, marcadores e loops', requiresAudio: false, Icon: FileText },
     { id: 'pdf', label: 'Relatório PDF', desc: 'Resumo completo: vídeo, loops, marcas, cifras e notas', requiresAudio: false, Icon: FileCheck2 },
