@@ -1,0 +1,18 @@
+{
+  "name": "mrq-estudo-musical-desktop",
+  "version": "1.0.0",
+  "description": "MRQ Estudo Musical — Software multiplataforma de estudo, transcrição e análise musical",
+  "main": "main.js",
+  "author": "MRQ Audio Engineering",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "dist:win": "electron-builder --win nsis msi --x64 --config electron-builder.yml",
+    "dist:mac": "electron-builder --mac dmg zip --arm64 --config electron-builder.yml",
+    "dist:linux": "electron-builder --linux AppImage --x64 --config electron-builder.yml"
+  },
+  "devDependencies": {
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8"
+  }
+}

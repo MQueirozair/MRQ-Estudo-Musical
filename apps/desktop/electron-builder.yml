@@ -1,0 +1,92 @@
+appId: com.mrq.estudomusical
+productName: MRQ Estudo Musical
+copyright: Copyright © 2026 MRQ Estudo Musical Contributors
+
+directories:
+  output: release
+  buildResources: ../../assets/icons
+
+files:
+  - main.js
+  - preload.js
+  - package.json
+
+extraResources:
+  - from: backend-dist
+    to: backend
+    filter:
+      - "**/*"
+  - from: ../../core/build
+    to: dsp
+    filter:
+      - "*.dll"
+      - "*.dylib"
+      - "*.so"
+  - from: ../../apps/studio/dist
+    to: studio-dist
+    filter:
+      - "**/*"
+  - from: ../../models/manifest.json
+    to: models/manifest.json
+  - from: ../../app.config.json
+    to: app.config.json
+
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+    - target: msi
+      arch:
+        - x64
+  icon: ../../assets/icons/mrq-icon.ico
+  artifactName: "MRQ-Estudo-Musical-Setup-${version}-${arch}.${ext}"
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: MRQ Estudo Musical
+  uninstallDisplayName: MRQ Estudo Musical
+  license: ../../LICENSE
+
+msi:
+  oneClick: false
+  perMachine: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+
+mac:
+  category: public.app-category.music
+  icon: ../../assets/icons/mrq-icon-512.png
+  target:
+    - target: dmg
+      arch:
+        - arm64
+    - target: zip
+      arch:
+        - arm64
+  hardenedRuntime: false
+  gatekeeperAssess: false
+  artifactName: "MRQ-Estudo-Musical-${version}-${arch}.${ext}"
+
+dmg:
+  title: "MRQ Estudo Musical ${version}"
+  contents:
+    - x: 130
+      y: 220
+    - x: 410
+      y: 220
+      type: link
+      path: /Applications
+
+linux:
+  category: AudioVideo;Audio;Music;Education
+  icon: ../../assets/icons/mrq-icon-512.png
+  target:
+    - target: AppImage
+      arch:
+        - x64
+  artifactName: "MRQ-Estudo-Musical-${version}-${arch}.${ext}"

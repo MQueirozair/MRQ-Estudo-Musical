@@ -1,0 +1,204 @@
+name: Release — Instaladores Multiplataforma (Windows, macOS, Android, Linux)
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - "arena/**"
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    name: Windows x64 (.EXE NSIS + .MSI)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Build Windows DSP, Sidecar and Installers
+        shell: pwsh
+        run: .\installers\windows\build_windows.ps1
+      - name: Upload Windows Installers
+        uses: actions/upload-artifact@v4
+        with:
+          name: MRQ-Estudo-Musical-Windows-x64
+          path: |
+            apps/desktop/release/*.exe
+            apps/desktop/release/*.msi
+
+  build-macos:
+    name: macOS Apple Silicon (.APP + .DMG)
+    runs-on: macos-latest
+    env:
+      APPLE_ID: ${{ secrets.APPLE_ID }}
+      APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Build macOS DSP, App & DMG
+        run: bash installers/macos/build_macos.sh
+      - name: Upload macOS DMG & ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: MRQ-Estudo-Musical-macOS-arm64
+          path: |
+            apps/desktop/release/*.dmg
+            apps/desktop/release/*.zip
+
+  build-android:
+    name: Android (.APK + .AAB com C++17 NDK JNI)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
+      - name: Install Android NDK & CMake (using runner ANDROID_HOME)
+        run: |
+          SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          echo "ANDROID_HOME=$SDK_ROOT" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$SDK_ROOT" >> "$GITHUB_ENV"
+          SDKMANAGER="$(find "$SDK_ROOT" -name sdkmanager -type f 2>/dev/null | head -n 1 || true)"
+          if [ -z "$SDKMANAGER" ]; then
+            mkdir -p "$SDK_ROOT/cmdline-tools"
+            curl -fsSL https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -o /tmp/cmdline-tools.zip
+            unzip -q /tmp/cmdline-tools.zip -d "$SDK_ROOT/cmdline-tools"
+            mv "$SDK_ROOT/cmdline-tools/cmdline-tools" "$SDK_ROOT/cmdline-tools/latest"
+            SDKMANAGER="$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+          fi
+          yes | "$SDKMANAGER" --sdk_root="$SDK_ROOT" --licenses >/dev/null 2>&1 || true
+          "$SDKMANAGER" --sdk_root="$SDK_ROOT" "ndk;26.3.11579264" "cmake;3.22.1" "platforms;android-35" "build-tools;35.0.0"
+      - name: Build Android APK & AAB
+        run: bash installers/android/build_android.sh
+      - name: Upload Android APK & AAB
+        uses: actions/upload-artifact@v4
+        with:
+          name: MRQ-Estudo-Musical-Android
+          path: |
+            apps/android/release/*.apk
+            apps/android/release/*.aab
+
+  build-linux:
+    name: Linux x64 (.AppImage)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Build Linux DSP, Sidecar & AppImage
+        run: |
+          make -C core test
+          npm --prefix apps/studio ci && npm --prefix apps/studio run build
+          rm -rf apps/desktop/backend-dist
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt pyinstaller
+          pyinstaller --noconfirm --onedir --name mrq-engine \
+            --paths . \
+            --add-data "database/schema.sql:database" \
+            --add-data "models/manifest.json:models" \
+            --add-data "app.config.json:." \
+            --add-data "apps/studio/dist:apps/studio/dist" \
+            --collect-all av \
+            --collect-binaries onnxruntime \
+            --collect-data onnxruntime \
+            --collect-submodules onnxruntime.capi \
+            --collect-all reportlab \
+            --collect-all mido \
+            --collect-submodules scipy.signal \
+            --collect-submodules scipy.ndimage \
+            --hidden-import scripts.generate_demo_audio \
+            --hidden-import uvicorn.logging \
+            --hidden-import uvicorn.loops.auto \
+            --hidden-import uvicorn.protocols.http.auto \
+            --hidden-import uvicorn.protocols.websockets.auto \
+            --hidden-import uvicorn.lifespan.on \
+            --hidden-import multipart \
+            --distpath "apps/desktop/backend-dist" \
+            backend/main.py
+          python scripts/smoke_test_engine.py "apps/desktop/backend-dist/mrq-engine/mrq-engine" "core/build/libmrq_dsp.so"
+          npm --prefix apps/desktop install
+          npm --prefix apps/desktop run dist:linux
+      - name: Upload Linux AppImage
+        uses: actions/upload-artifact@v4
+        with:
+          name: MRQ-Estudo-Musical-Linux-x64
+          path: apps/desktop/release/*.AppImage
+
+  publish-release:
+    name: Publicar Instaladores no GitHub Releases
+    needs: [build-windows, build-macos, build-android, build-linux]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download All Platform Installers
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
+
+      - name: Generate SHA256SUMS.txt
+        run: |
+          cd release-assets
+          ls -lh
+          sha256sum * > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Create or Update GitHub Release with Installers
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            TAG="${{ github.ref_name }}"
+            TITLE="MRQ Estudo Musical ${TAG}"
+            PRERELEASE_FLAG=""
+          else
+            TAG="v1.0.0-test"
+            TITLE="MRQ Estudo Musical v1.0.0 — Instaladores de Teste (Windows, macOS, Android, Linux)"
+            PRERELEASE_FLAG="--prerelease"
+          fi
+
+          NOTES="Instaladores nativos compilados automaticamente via GitHub Actions para testes em todas as plataformas:
+
+          - **Windows (x64)**: \`MRQ-Estudo-Musical-Setup-1.0.0-x64.exe\` (NSIS) e \`MRQ-Estudo-Musical-Setup-1.0.0-x64.msi\` (MSI)
+          - **macOS (Apple Silicon arm64)**: \`MRQ-Estudo-Musical-1.0.0-arm64.dmg\` e \`MRQ-Estudo-Musical-1.0.0-arm64.zip\` (\`.app\`)
+          - **Android (ARM64 + ARMv7 com C++17 NDK JNI)**: \`MRQ-Estudo-Musical-1.0.0-android.apk\` (assinado para instalação direta) e \`MRQ-Estudo-Musical-1.0.0-android.aab\`
+          - **Linux (x64)**: \`MRQ-Estudo-Musical-1.0.0-x64.AppImage\`
+          - **Verificação de Integridade**: \`SHA256SUMS.txt\`
+
+          Commit compilado: \`${{ github.sha }}\`"
+
+          if gh release view "$TAG" --repo "${{ github.repository }}" >/dev/null 2>&1; then
+            gh release upload "$TAG" release-assets/* --clobber --repo "${{ github.repository }}"
+            gh release edit "$TAG" --title "$TITLE" --notes "$NOTES" --repo "${{ github.repository }}"
+          else
+            gh release create "$TAG" release-assets/* \
+              --repo "${{ github.repository }}" \
+              --target "${{ github.sha }}" \
+              --title "$TITLE" \
+              --notes "$NOTES" \
+              $PRERELEASE_FLAG
+          fi
