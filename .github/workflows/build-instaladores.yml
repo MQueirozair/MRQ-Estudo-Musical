@@ -2,12 +2,10 @@ name: Instaladores (Windows, macOS e Linux)
 
 on:
   workflow_dispatch:
-  # roda também em PRs, para gerar os instaladores antes do merge
   pull_request:
   push:
     branches: ['arena/**', main]
-    tags:
-      - 'v*'
+    tags: ['v*']
 
 permissions:
   contents: read
@@ -27,30 +25,27 @@ jobs:
 
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
 
+      # 1) Instalar SEM baixar o binário do Electron (evita falha de rede no postinstall)
       - name: Instalar dependências
         run: npm ci
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: 1
 
-      # Diagnóstico curto e legível se algo falhar no empacotamento
-      - name: Versões
-        run: |
-          node -v
-          npm -v
-          npx electron --version
+      - name: Verificar instalação do Electron
+        run: npm run electron:check
 
       - name: Gerar instaladores
-        run: npx vite build && npx electron-builder --${{ matrix.platform }} --publish never
+        run: npm run dist:${{ matrix.platform }}
         env:
-          # Builds não assinados (sem certificado comercial)
           CSC_IDENTITY_AUTO_DISCOVERY: false
           ELECTRON_BUILDER_CACHE: ${{ runner.temp }}/eb-cache
-          DEBUG: electron-builder
 
       - name: Listar artefatos gerados
         shell: bash
@@ -66,5 +61,4 @@ jobs:
             release/*.zip
             release/*.AppImage
             release/*.deb
-            release/*.yml
           if-no-files-found: warn

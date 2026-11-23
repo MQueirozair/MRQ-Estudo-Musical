@@ -16,13 +16,14 @@
     "preview": "vite preview",
     "electron:dev": "electron .",
     "electron:start": "concurrently -k \"vite\" \"wait-on tcp:5173 && cross-env VITE_DEV_SERVER_URL=http://localhost:5173 electron .\"",
-    "dist": "vite build && electron-builder",
-    "dist:all": "vite build && electron-builder --win --mac --linux",
-    "dist:win": "vite build && electron-builder --win",
-    "dist:mac": "vite build && electron-builder --mac",
-    "dist:linux": "vite build && electron-builder --linux",
+    "dist": "npm run electron:check && vite build && electron-builder",
+    "dist:all": "npm run electron:check && vite build && electron-builder --win --mac --linux",
+    "dist:win": "npm run electron:check && vite build && electron-builder --win",
+    "dist:mac": "npm run electron:check && vite build && electron-builder --mac",
+    "dist:linux": "npm run electron:check && vite build && electron-builder --linux",
     "typecheck": "tsc --noEmit",
-    "test": "node scripts/check.mjs"
+    "test": "node scripts/check.mjs",
+    "electron:check": "node scripts/ensure-electron.mjs"
   },
   "dependencies": {
     "react": "^19.3.0",
