@@ -1,0 +1,14 @@
+{
+  "appId": "br.com.mrq.estudomusical",
+  "appName": "MRQ Estudo Musical",
+  "webDir": "dist",
+  "backgroundColor": "#070b14",
+  "android": {
+    "allowMixedContent": false,
+    "captureInput": true,
+    "webContentsDebuggingEnabled": false
+  },
+  "server": {
+    "androidScheme": "https"
+  }
+}
