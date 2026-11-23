@@ -42,40 +42,30 @@ jobs:
       - name: Verificar instalação do Electron
         run: npm run electron:check
 
-      # Grava o log em arquivo e sinaliza falha corretamente (mantém o job vivo
-      # para que o erro real apareça no resumo da execução)
       - name: Gerar instaladores
         shell: bash
         run: |
           set -o pipefail
-          if npm run dist:${{ matrix.platform }} 2>&1 | tee build.log; then
-            echo "STATUS_BUILD=ok" >> "$GITHUB_ENV"
-          else
-            echo "STATUS_BUILD=falhou" >> "$GITHUB_ENV"
-          fi
-        env:
-          CSC_IDENTITY_AUTO_DISCOVERY: false
-          ELECTRON_BUILDER_CACHE: ${{ runner.temp }}/eb-cache
+          npm run dist:${{ matrix.platform }} 2>&1 | tee build.log
 
-      - name: Diagnóstico (se falhou)
-        if: env.STATUS_BUILD != 'ok'
+      - name: Conferir e publicar artefatos
         shell: bash
         run: |
-          echo "::error title=electron-builder falhou::veja o resumo da execução"
-          echo "### Últimas linhas do build" >> "$GITHUB_STEP_SUMMARY"
-          echo '```' >> "$GITHUB_STEP_SUMMARY"
-          grep -viE "^\s*$" build.log | tail -40 >> "$GITHUB_STEP_SUMMARY"
-          echo '```' >> "$GITHUB_STEP_SUMMARY"
-          exit 1
-
-      - name: Listar artefatos gerados
-        shell: bash
-        run: |
-          ls -la release/ || true
           echo "### Arquivos gerados" >> "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
           ls -lh release/ 2>/dev/null | awk '{print $5, $9}' >> "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+          qtd=$(ls release/*.exe release/*.dmg release/*.zip release/*.AppImage release/*.deb 2>/dev/null | wc -l)
+          if [ "$qtd" -eq 0 ]; then
+            echo "::error title=Sem instalador::o empacotamento não gerou arquivos. Últimas linhas:"
+            echo "### Falha no empacotamento" >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            grep -viE "^\s*$" build.log | tail -40 >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          echo "$qtd instalador(es) gerado(s)."
 
       # Só os instaladores (o *-unpacked/*.blockmap ficam de fora)
       - uses: actions/upload-artifact@v4
