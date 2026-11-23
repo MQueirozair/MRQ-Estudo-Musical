@@ -1,0 +1,131 @@
+name: Android (APK e AAB)
+
+on:
+  workflow_dispatch:
+  pull_request:
+  push:
+    branches: ['arena/**', main]
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Instalar dependências
+        run: npm ci
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: 1
+
+      - name: Build web + sincronizar com o Android
+        run: |
+          npm run build
+          npx cap sync android
+
+      - name: Configurar Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Gerar APK de depuração (instalável direto)
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon --stacktrace
+
+      # Assinatura: usa a keystore dos secrets se existir; senão gera uma de
+      # demonstração para que o APK release também seja instalável.
+      - name: Preparar assinatura
+        working-directory: android
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          mkdir -p assinatura
+          if [ -n "$ANDROID_KEYSTORE_BASE64" ]; then
+            echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > assinatura/mrq.keystore
+            echo "Usando keystore dos secrets."
+          else
+            keytool -genkeypair -v \
+              -keystore assinatura/mrq.keystore \
+              -alias mrq \
+              -keyalg RSA -keysize 2048 -validity 10000 \
+              -storepass mrqestudo -keypass mrqestudo \
+              -dname "CN=MRQ Estudo Musical, OU=MRQ, O=MRQ, L=Sao Paulo, ST=SP, C=BR"
+            echo "Keystore de demonstração gerada (build não assinado comercialmente)."
+            echo "ANDROID_KEY_ALIAS=mrq" >> "$GITHUB_ENV"
+            echo "ANDROID_KEYSTORE_PASSWORD=mrqestudo" >> "$GITHUB_ENV"
+            echo "ANDROID_KEY_PASSWORD=mrqestudo" >> "$GITHUB_ENV"
+          fi
+
+      - name: Gerar APK e AAB assinados
+        working-directory: android
+        env:
+          ANDROID_KEY_ALIAS: ${{ env.ANDROID_KEY_ALIAS || secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ env.ANDROID_KEYSTORE_PASSWORD || secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_PASSWORD: ${{ env.ANDROID_KEY_PASSWORD || secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          ./gradlew assembleRelease bundleRelease --no-daemon --stacktrace \
+            -Pandroid.injected.signing.store.file="$PWD/assinatura/mrq.keystore" \
+            -Pandroid.injected.signing.store.password="$ANDROID_KEYSTORE_PASSWORD" \
+            -Pandroid.injected.signing.key.alias="$ANDROID_KEY_ALIAS" \
+            -Pandroid.injected.signing.key.password="$ANDROID_KEY_PASSWORD"
+
+      - name: Organizar artefatos
+        run: |
+          mkdir -p dist-android
+          cp android/app/build/outputs/apk/debug/app-debug.apk \
+             "dist-android/MRQ-Estudo-Musical-1.0.0-debug.apk" || true
+          cp android/app/build/outputs/apk/release/app-release.apk \
+             "dist-android/MRQ-Estudo-Musical-1.0.0.apk" || true
+          cp android/app/build/outputs/bundle/release/app-release.aab \
+             "dist-android/MRQ-Estudo-Musical-1.0.0.aab" || true
+          ls -lh dist-android
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: instaladores-android
+          path: dist-android/*
+          if-no-files-found: error
+
+      # Junta os APKs no mesmo Release dos instaladores de desktop
+      - name: Publicar no Release
+        if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'v1.0.0' }}
+          files: |
+            dist-android/*.apk
+            dist-android/*.aab
+          body: |
+            ## MRQ Estudo Musical
+
+            Aplicativo de estudo musical — **100% offline**, com base local no aparelho.
+
+            | Sistema | Arquivo |
+            | --- | --- |
+            | **Windows x64** | `.exe` (instalador) e `.exe` portátil |
+            | **macOS** | `.dmg` Intel (`x64`) e Apple Silicon (`arm64`) |
+            | **Android** | `.apk` (instale direto) e `.aab` (para a Play Store) |
+            | Linux | `.AppImage` e `.deb` |
+
+            **Android:** baixe o `.apk`, toque para instalar e permita "instalar de fontes desconhecidas".
+            **Windows:** se o SmartScreen avisar, clique em *Mais informações → Executar assim mesmo*.
+            **macOS:** botão direito no app → *Abrir* (build sem certificado Apple).

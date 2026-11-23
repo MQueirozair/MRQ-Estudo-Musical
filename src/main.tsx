@@ -2,7 +2,10 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App';
 import { ToastProvider } from './ui/toast';
+import { initAndroid } from './lib/native';
 import './styles.css';
+
+initAndroid();
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

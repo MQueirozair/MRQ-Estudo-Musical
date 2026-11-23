@@ -1202,3 +1202,75 @@ select {
     display: block;
   }
 }
+
+/* ============================================================
+   Android / toque — alvos maiores e sem zoom acidental
+   ============================================================ */
+.native-app {
+  -webkit-user-select: none;
+  user-select: none;
+  touch-action: manipulation;
+  overscroll-behavior: none;
+}
+
+.native-app input,
+.native-app textarea {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+.native-app .topbar {
+  padding-top: max(12px, env(safe-area-inset-top));
+}
+
+.native-app .sidebar {
+  padding-bottom: max(12px, env(safe-area-inset-bottom));
+}
+
+.native-app .content {
+  padding-bottom: calc(40px + env(safe-area-inset-bottom));
+}
+
+@media (max-width: 720px) {
+  /* teclas confortáveis para o dedo */
+  .key.white {
+    width: 34px;
+  }
+  .key.black {
+    width: 21px;
+  }
+  .piano {
+    height: 140px;
+  }
+  .content-inner {
+    gap: 12px;
+  }
+  .panel {
+    padding: 13px;
+    border-radius: 14px;
+  }
+  .chord-symbol {
+    font-size: 30px;
+  }
+  .chord-grid {
+    grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+    max-height: 260px;
+  }
+  .key-grid {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+  .nav-item {
+    padding: 11px;
+    font-size: 13.5px;
+  }
+  .btn {
+    padding: 9px 13px;
+  }
+  .btn.sm {
+    padding: 7px 10px;
+    font-size: 12px;
+  }
+  .answer-btn {
+    padding: 15px 10px;
+  }
+}

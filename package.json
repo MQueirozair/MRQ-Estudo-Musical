@@ -23,13 +23,20 @@
     "dist:linux": "npm run electron:check && vite build && electron-builder --linux --publish never",
     "typecheck": "tsc --noEmit",
     "test": "node scripts/check.mjs",
-    "electron:check": "node scripts/ensure-electron.mjs"
+    "electron:check": "node scripts/ensure-electron.mjs",
+    "android:sync": "vite build && cap sync android",
+    "android:apk": "vite build && cap sync android && cd android && ./gradlew assembleDebug",
+    "icons:android": "python3 scripts/gerar-icones-android.py"
   },
   "dependencies": {
+    "@capacitor/app": "^6.0.3",
+    "@capacitor/core": "^6.2.3",
     "react": "^19.3.0",
     "react-dom": "^19.3.0"
   },
   "devDependencies": {
+    "@capacitor/android": "^6.2.3",
+    "@capacitor/cli": "^6.2.3",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.3.0",
