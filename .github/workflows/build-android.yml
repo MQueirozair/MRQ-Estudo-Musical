@@ -91,13 +91,24 @@ jobs:
       - name: Organizar artefatos
         run: |
           mkdir -p dist-android
-          cp android/app/build/outputs/apk/debug/app-debug.apk \
-             "dist-android/MRQ-Estudo-Musical-1.0.0-debug.apk" || true
           cp android/app/build/outputs/apk/release/app-release.apk \
              "dist-android/MRQ-Estudo-Musical-1.0.0.apk" || true
           cp android/app/build/outputs/bundle/release/app-release.aab \
              "dist-android/MRQ-Estudo-Musical-1.0.0.aab" || true
           ls -lh dist-android
+
+      # Confere que o APK é válido, está assinado e contém o app web dentro
+      - name: Validar APK
+        run: |
+          set -e
+          APK="dist-android/MRQ-Estudo-Musical-1.0.0.apk"
+          test -f "$APK" || { echo "::error title=APK ausente"; exit 1; }
+          echo "### Conteúdo do APK" >> "$GITHUB_STEP_SUMMARY"
+          unzip -l "$APK" | grep -E "assets/public/(index.html|assets/index-.*\.js)" | head -5 | tee -a "$GITHUB_STEP_SUMMARY"
+          unzip -l "$APK" | grep -q "assets/public/index.html" || { echo "::error title=APK sem o app web"; exit 1; }
+          BT=$(ls "$ANDROID_HOME"/build-tools | sort -V | tail -1)
+          APKSIGNER="$ANDROID_HOME/build-tools/$BT/apksigner"
+          "$APKSIGNER" verify --print-certs "$APK" | head -6 | tee -a "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/upload-artifact@v4
         with:
