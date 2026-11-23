@@ -2,7 +2,10 @@ name: Instaladores (Windows, macOS e Linux)
 
 on:
   workflow_dispatch:
+  # também roda em PRs, para gerar os instaladores antes do merge
+  pull_request:
   push:
+    branches: ['arena/**', main]
     tags:
       - 'v*'
 
