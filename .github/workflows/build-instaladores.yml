@@ -41,11 +41,26 @@ jobs:
       - name: Verificar instalação do Electron
         run: npm run electron:check
 
+      # `|| true` mantém o job vivo para que o erro real apareça no resumo
       - name: Gerar instaladores
-        run: npm run dist:${{ matrix.platform }}
+        shell: bash
+        run: |
+          set -o pipefail
+          npm run dist:${{ matrix.platform }} 2>&1 | tee build.log || echo "FALHOU=1" >> "$GITHUB_ENV"
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
           ELECTRON_BUILDER_CACHE: ${{ runner.temp }}/eb-cache
+
+      - name: Diagnóstico (se falhou)
+        if: env.FALHOU == '1'
+        shell: bash
+        run: |
+          echo "::error title=electron-builder falhou::Veja as últimas linhas do log"
+          echo "### Últimas linhas do build" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          grep -viE "^\s*$" build.log | tail -40 >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          grep -iE "error|cannot|failed|not found|ENOENT|EACCES|ERR_" build.log | tail -20
 
       - name: Listar artefatos gerados
         shell: bash
