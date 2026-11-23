@@ -42,7 +42,26 @@ npm run dev          # abre no navegador em http://localhost:5173
 npm run electron:dev # build + abre na janela do app desktop
 ```
 
-## Gerar os instaladores
+## Baixar os instaladores prontos (mais rápido)
+
+Os instaladores já compilados estão na página de **Releases**:
+
+**[⬇️ Baixar MRQ Estudo Musical v1.0.0](https://github.com/MQueirozair/MRQ-Estudo-Musical/releases/tag/v1.0.0)**
+
+| Sistema | Arquivo | Tamanho |
+| --- | --- | --- |
+| **Windows 64 bits** | `MRQ-Estudo-Musical-1.0.0-x64-setup.exe` (instalador) | ~78 MB |
+| Windows (sem instalar) | `MRQ-Estudo-Musical-1.0.0-portable.exe` | ~78 MB |
+| **macOS Apple Silicon** (M1–M4) | `MRQ-Estudo-Musical-1.0.0-arm64.dmg` | ~89 MB |
+| **macOS Intel** | `MRQ-Estudo-Musical-1.0.0-x64.dmg` | ~92 MB |
+| macOS (zip, para distribuir) | `.zip` arm64 / x64 | ~93–97 MB |
+| Linux | `MRQ-Estudo-Musical-1.0.0-x86_64.AppImage` ou `.deb` | ~73–81 MB |
+
+> Os builds **não são assinados** com certificado comercial.
+> **Windows:** se aparecer o SmartScreen, clique em *Mais informações → Executar assim mesmo*.
+> **macOS:** clique com o botão direito no app → **Abrir** (só na primeira vez).
+
+## Gerar os instaladores você mesmo
 
 ```bash
 npm run dist:win     # Windows  → .exe (instalador NSIS) + versão portátil
@@ -52,14 +71,19 @@ npm run dist:linux   # Linux    → AppImage + .deb
 
 Os arquivos saem na pasta `release/`.
 
+> 💡 O script `npm run electron:check` baixa o binário do Electron antes do empacotamento
+> (necessário porque o `npm ci` no CI roda com `ELECTRON_SKIP_BINARY_DOWNLOAD=1`). Se a sua rede
+> bloquear o GitHub, use um espelho: `ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/`.
+
 > ⚠️ **Gerar instalador de Windows exige Windows** (ou Wine + Docker no Linux) e **instalador de
 > macOS exige macOS** por causa da assinatura/empacotamento da Apple. Se você não tem as duas
 > máquinas, use o workflow do GitHub Actions incluído: ele compila Windows, macOS e Linux em
 > máquinas reais da Microsoft/Apple e devolve os instaladores prontos como artefatos.
 >
 > No GitHub: **Actions → "Instaladores (Windows, macOS e Linux)" → Run workflow**.
-> Ao final, baixe o artefato `instaladores-win`, `instaladores-mac` ou `instaladores-linux`.
-> Também é possível publicar uma release criando uma tag: `git tag v1.0.0 && git push --tags`.
+> O workflow compila os três sistemas, valida os arquivos e **publica um Release** com download
+> direto (sem precisar de login). Ele também roda automaticamente em pull requests, deixando os
+> instaladores como artefatos temporários de teste.
 
 Os builds **não são assinados** com certificado comercial. Por isso:
 - **Windows**: o SmartScreen pode pedir “Mais informações → Executar assim mesmo”.
