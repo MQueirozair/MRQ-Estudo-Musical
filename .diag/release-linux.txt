@@ -1,8 +1,0 @@
-total 158400
-drwxr-xr-x  3 runner runner     4096 Nov 23 02:04 .
-drwxr-xr-x 12 runner runner     4096 Nov 23 02:03 ..
--rw-r--r--  1 runner runner 76475604 Nov 23 02:04 MRQ-Estudo-Musical-1.0.0-amd64.deb
--rwxr-xr-x  1 runner runner 85701068 Nov 23 02:03 MRQ-Estudo-Musical-1.0.0-x86_64.AppImage
--rw-r--r--  1 runner runner      845 Nov 23 02:04 builder-debug.yml
--rw-r--r--  1 runner runner      564 Nov 23 02:04 latest-linux.yml
-drwxr-xr-x  4 runner runner     4096 Nov 23 02:02 linux-unpacked
