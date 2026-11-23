@@ -8,7 +8,7 @@ on:
     tags: ['v*']
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -66,6 +66,21 @@ jobs:
             exit 1
           fi
           echo "$qtd instalador(es) gerado(s)."
+
+      - name: Publicar log de diagnóstico
+        if: github.event_name == 'workflow_dispatch' && always()
+        shell: bash
+        continue-on-error: true
+        run: |
+          mkdir -p .diag
+          cp build.log ".diag/build-${{ matrix.platform }}.log" 2>/dev/null || true
+          ls -la release > ".diag/release-${{ matrix.platform }}.txt" 2>&1 || true
+          git config user.name "arena-agent"
+          git config user.email "agent@arena.ai"
+          git add -f .diag
+          git commit -m "ci(diag): log ${{ matrix.platform }}" || true
+          git pull --rebase --autostash origin "${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}" || true
+          git push origin "HEAD:${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}" || true
 
       # Só os instaladores (o *-unpacked/*.blockmap ficam de fora)
       - uses: actions/upload-artifact@v4
