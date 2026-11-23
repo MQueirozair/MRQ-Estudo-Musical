@@ -55,11 +55,33 @@ Os instaladores já compilados estão na página de **Releases**:
 | **macOS Apple Silicon** (M1–M4) | `MRQ-Estudo-Musical-1.0.0-arm64.dmg` | ~89 MB |
 | **macOS Intel** | `MRQ-Estudo-Musical-1.0.0-x64.dmg` | ~92 MB |
 | macOS (zip, para distribuir) | `.zip` arm64 / x64 | ~93–97 MB |
+| **Android** | `MRQ-Estudo-Musical-1.0.0.apk` (instale direto) | ~3,6 MB |
+| Android (Play Store) | `MRQ-Estudo-Musical-1.0.0.aab` | ~3,4 MB |
 | Linux | `MRQ-Estudo-Musical-1.0.0-x86_64.AppImage` ou `.deb` | ~73–81 MB |
+
+> **Android:** baixe o `.apk` no celular, toque no arquivo e permita *instalar de fontes desconhecidas*.
+> O APK é compacto porque usa o WebView do próprio Android (sem Chromium embutido). O `.aab` é o
+> formato exigido pela Play Store.
 
 > Os builds **não são assinados** com certificado comercial.
 > **Windows:** se aparecer o SmartScreen, clique em *Mais informações → Executar assim mesmo*.
 > **macOS:** clique com o botão direito no app → **Abrir** (só na primeira vez).
+> **Android:** o APK é assinado com uma chave de demonstração (gerada no CI). Para publicar na
+> Play Store, adicione os secrets `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEY_ALIAS`,
+> `ANDROID_KEYSTORE_PASSWORD` e `ANDROID_KEY_PASSWORD` com a sua chave de produção.
+
+## Android
+
+O app Android usa **Capacitor**: o mesmo código React roda dentro de um WebView local, com a base
+de dados no próprio aparelho (sem servidor). O projeto nativo fica em `android/`.
+
+```bash
+npm run android:sync    # build web + copia para o projeto Android
+npm run android:apk     # gera o APK de depuração (precisa do Android SDK)
+```
+
+O workflow **"Android (APK e AAB)"** roda no CI, gera o APK assinado + o AAB e publica no mesmo
+Release dos instaladores de desktop. Necessário: JDK 21 + Android SDK 34 (o CI já tem os dois).
 
 ## Gerar os instaladores você mesmo
 
@@ -116,16 +138,19 @@ para o `localStorage`, sem quebrar nada.
 electron/
   main.cjs        janela nativa, menu em português, IPC de armazenamento em JSON
   preload.cjs     ponte segura (contextIsolation) expondo window.mrq
+android/          projeto Android nativo gerado pelo Capacitor (WebView + APK)
+capacitor.config.json  identidade e ajustes do app Android
 src/
   music/          teoria (acordes, escalas, progressões) + motor de áudio (síntese)
   components/     Piano, partitura SVG, dedilhado, metrônomo, biblioteca
   pages/          14 telas do app
-  lib/            persistência local + conquistas
+  lib/            persistência local, conquistas e ajustes do Android
   ui/             ícones SVG próprios e toasts
 scripts/          verificações de teoria e de renderização
 ```
 
-Stack: **React 19 + TypeScript + Vite**, empacotado com **Electron + electron-builder**.
+Stack: **React 19 + TypeScript + Vite**, empacotado com **Electron + electron-builder** no
+desktop e **Capacitor** no Android.
 Sem fontes, imagens ou bibliotecas de áudio externas — o app inteiro é offline.
 
 ## Verificações rápidas
