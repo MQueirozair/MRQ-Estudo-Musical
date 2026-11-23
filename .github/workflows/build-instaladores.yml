@@ -2,12 +2,15 @@ name: Instaladores (Windows, macOS e Linux)
 
 on:
   workflow_dispatch:
-  # também roda em PRs, para gerar os instaladores antes do merge
+  # roda também em PRs, para gerar os instaladores antes do merge
   pull_request:
   push:
     branches: ['arena/**', main]
     tags:
       - 'v*'
+
+permissions:
+  contents: read
 
 jobs:
   build:
@@ -31,16 +34,30 @@ jobs:
           node-version: 22
           cache: npm
 
-      - run: npm ci
+      - name: Instalar dependências
+        run: npm ci
+
+      # Diagnóstico curto e legível se algo falhar no empacotamento
+      - name: Versões
+        run: |
+          node -v
+          npm -v
+          npx electron --version
 
       - name: Gerar instaladores
-        run: npm run dist:${{ matrix.platform }}
+        run: npx vite build && npx electron-builder --${{ matrix.platform }} --publish never
         env:
-          # Builds não assinados: usuários verão o aviso padrão do sistema
+          # Builds não assinados (sem certificado comercial)
           CSC_IDENTITY_AUTO_DISCOVERY: false
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ELECTRON_BUILDER_CACHE: ${{ runner.temp }}/eb-cache
+          DEBUG: electron-builder
+
+      - name: Listar artefatos gerados
+        shell: bash
+        run: ls -la release/ || true
 
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: instaladores-${{ matrix.platform }}
           path: |
@@ -49,4 +66,5 @@ jobs:
             release/*.zip
             release/*.AppImage
             release/*.deb
+            release/*.yml
           if-no-files-found: warn

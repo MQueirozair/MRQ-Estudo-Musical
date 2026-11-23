@@ -212,10 +212,19 @@ async function readAllData() {
 
 // ---- IPC de armazenamento local (um JSON por chave) ----
 ipcMain.handle('store:get', async (_e, key) => {
+  const file = path.join(dataDir, `${safeName(key)}.json`);
   try {
-    const raw = await fs.readFile(path.join(dataDir, `${safeName(key)}.json`), 'utf8');
+    const raw = await fs.readFile(file, 'utf8');
     return JSON.parse(raw);
-  } catch {
+  } catch (err) {
+    // arquivo corrompido: guarda uma cópia para não perder o histórico do usuário
+    if (err && err.code !== 'ENOENT') {
+      try {
+        await fs.rename(file, `${file}.corrompido-${Date.now()}`);
+      } catch {
+        /* ignora */
+      }
+    }
     return null;
   }
 });
@@ -224,7 +233,10 @@ ipcMain.handle('store:set', async (_e, key, value) => {
   await ensureDir();
   const tmp = path.join(dataDir, `${safeName(key)}.json.tmp`);
   const dest = path.join(dataDir, `${safeName(key)}.json`);
-  await fs.writeFile(tmp, JSON.stringify(value), 'utf8');
+  const json = JSON.stringify(value);
+  if (json === undefined) return false;
+  await fs.writeFile(tmp, json, 'utf8');
+  // rename atômico: nunca deixa um arquivo pela metade se o app fechar no meio
   await fs.rename(tmp, dest);
   return true;
 });
