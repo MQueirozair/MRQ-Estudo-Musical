@@ -8,3 +8,5 @@ Thumbs.db
 .vite/
 .env
 .env.local
+
+.diag/
