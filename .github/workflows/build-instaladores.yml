@@ -8,7 +8,7 @@ on:
     tags: ['v*']
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build:
@@ -56,7 +56,7 @@ jobs:
           ls -lh release/ 2>/dev/null | awk '{print $5, $9}' >> "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
 
-          qtd=$(ls release/*.exe release/*.dmg release/*.zip release/*.AppImage release/*.deb 2>/dev/null | wc -l)
+          qtd=$(find release -maxdepth 1 -type f \( -name '*.exe' -o -name '*.dmg' -o -name '*.zip' -o -name '*.AppImage' -o -name '*.deb' \) | wc -l)
           if [ "$qtd" -eq 0 ]; then
             echo "::error title=Sem instalador::o empacotamento não gerou arquivos. Últimas linhas:"
             echo "### Falha no empacotamento" >> "$GITHUB_STEP_SUMMARY"
@@ -66,21 +66,6 @@ jobs:
             exit 1
           fi
           echo "$qtd instalador(es) gerado(s)."
-
-      - name: Publicar log de diagnóstico
-        if: github.event_name == 'workflow_dispatch' && always()
-        shell: bash
-        continue-on-error: true
-        run: |
-          mkdir -p .diag
-          cp build.log ".diag/build-${{ matrix.platform }}.log" 2>/dev/null || true
-          ls -la release > ".diag/release-${{ matrix.platform }}.txt" 2>&1 || true
-          git config user.name "arena-agent"
-          git config user.email "agent@arena.ai"
-          git add -f .diag
-          git commit -m "ci(diag): log ${{ matrix.platform }}" || true
-          git pull --rebase --autostash origin "${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}" || true
-          git push origin "HEAD:${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}" || true
 
       # Só os instaladores (o *-unpacked/*.blockmap ficam de fora)
       - uses: actions/upload-artifact@v4
