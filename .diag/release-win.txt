@@ -1,10 +1,10 @@
 total 161025
-drwxr-xr-x 1 runneradmin 197121        0 Nov 23 01:52 .
-drwxr-xr-x 1 runneradmin 197121        0 Nov 23 01:52 ..
-drwxr-xr-x 1 runneradmin 197121        0 Nov 23 01:52 .icon-ico
--rwxr-xr-x 1 runneradmin 197121 82294129 Nov 23 01:52 MRQ-Estudo-Musical-1.0.0-portable.exe
--rwxr-xr-x 1 runneradmin 197121 82478089 Nov 23 01:52 MRQ-Estudo-Musical-1.0.0-x64-setup.exe
--rw-r--r-- 1 runneradmin 197121    86266 Nov 23 01:52 MRQ-Estudo-Musical-1.0.0-x64-setup.exe.blockmap
--rw-r--r-- 1 runneradmin 197121     6116 Nov 23 01:52 builder-debug.yml
--rw-r--r-- 1 runneradmin 197121      372 Nov 23 01:52 latest.yml
-drwxr-xr-x 1 runneradmin 197121        0 Nov 23 01:52 win-unpacked
+drwxr-xr-x 1 runneradmin 197121        0 Nov 23 02:03 .
+drwxr-xr-x 1 runneradmin 197121        0 Nov 23 02:03 ..
+drwxr-xr-x 1 runneradmin 197121        0 Nov 23 02:03 .icon-ico
+-rwxr-xr-x 1 runneradmin 197121 82294133 Nov 23 02:03 MRQ-Estudo-Musical-1.0.0-portable.exe
+-rwxr-xr-x 1 runneradmin 197121 82478088 Nov 23 02:03 MRQ-Estudo-Musical-1.0.0-x64-setup.exe
+-rw-r--r-- 1 runneradmin 197121    86257 Nov 23 02:03 MRQ-Estudo-Musical-1.0.0-x64-setup.exe.blockmap
+-rw-r--r-- 1 runneradmin 197121     6116 Nov 23 02:03 builder-debug.yml
+-rw-r--r-- 1 runneradmin 197121      372 Nov 23 02:03 latest.yml
+drwxr-xr-x 1 runneradmin 197121        0 Nov 23 02:03 win-unpacked
